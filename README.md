@@ -31,6 +31,8 @@ or browse the chapters on GitHub:
 
 - [Build and embed](docs/getting-started.md)
 - [Request context and streaming](docs/streaming.md)
+- [Multipart and advanced HTTP](docs/advanced-http.md)
+- [Useful framework web types](docs/framework-web-types.md)
 - [Routing and groups](docs/routing.md)
 - [Middleware, exception handling, and limits](docs/middleware.md)
 - [Lifetime and concurrency](docs/lifetime.md)

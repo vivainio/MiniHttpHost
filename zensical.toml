@@ -16,6 +16,8 @@ nav = [
     { "Routing and groups" = "routing.md" },
     { "Middleware, errors, and limits" = "middleware.md" },
     { "Lifetime and concurrency" = "lifetime.md" },
+    { "Multipart and advanced HTTP" = "advanced-http.md" },
+    { "Framework web types" = "framework-web-types.md" },
   ] },
   { "Architecture" = [
     { "WCF coexistence" = "wcf-coexistence.md" },
