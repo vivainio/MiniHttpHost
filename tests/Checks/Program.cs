@@ -308,18 +308,19 @@ internal static class Program
 
     private static async Task CheckWcfCoexistenceAsync()
     {
-        var prefix = Prefix();
+        var legacyPrefix = Prefix();
+        var httpPrefix = Prefix();
         var binding = new BasicHttpBinding { HostNameComparisonMode = HostNameComparisonMode.Exact };
-        using (var legacy = new ServiceHost(typeof(LegacyProbe), new Uri(prefix + "legacy/")))
+        using (var legacy = new ServiceHost(typeof(LegacyProbe), new Uri(legacyPrefix)))
         {
             legacy.AddServiceEndpoint(typeof(ILegacyProbe), binding, "");
             legacy.Open();
-            using (var server = new MiniWebServer(prefix + "new/", c => c.TextAsync("new endpoint")))
+            using (var server = new MiniWebServer(httpPrefix, c => c.TextAsync("new endpoint")))
             using (var client = new HttpClient(new HttpClientHandler { UseProxy = false }))
             {
                 await server.StartAsync();
-                Check(await client.GetStringAsync(prefix + "new/ready") == "new endpoint", "HTTP endpoint coexists with WCF on same port");
-                using (var factory = new ChannelFactory<ILegacyProbe>(binding, new EndpointAddress(prefix + "legacy/")))
+                Check(await client.GetStringAsync(httpPrefix + "ready") == "new endpoint", "HTTP endpoint coexists with WCF on separate ports");
+                using (var factory = new ChannelFactory<ILegacyProbe>(binding, new EndpointAddress(legacyPrefix)))
                 {
                     var channel = factory.CreateChannel();
                     try

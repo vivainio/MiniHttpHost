@@ -316,10 +316,10 @@ The checks use local HTTP listeners and cover routing, group authorization,
 middleware order, error handling, binary copying, response bytes arriving before
 an upload completes, request limits, route timeouts, and graceful/forced shutdown.
 The Windows GitHub Actions job runs the same executable on .NET Framework against
-HTTP.sys. `MINIHTTPHOST_TEST_PORT` selects the first of three sequential test ports
+HTTP.sys. `MINIHTTPHOST_TEST_PORT` selects the first of four sequential test ports
 when explicit Windows URL reservations are needed. The Windows-only WCF cohosting
-check verifies both protocols can share a process and port with disjoint
-explicit-host prefixes.
+check verifies both protocols can share a process on separate ports and shut down
+independently.
 
 Mono 6.14.1 on macOS supports local development, but is not an HTTP.sys substitute.
 An unrestricted chunked request upload previously stalled after the body arrived;

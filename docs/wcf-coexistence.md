@@ -35,11 +35,11 @@ explicit-host `http://localhost:8080/new/` listener despite the latter's longer
 path. Inspect the actual WCF registrations rather than assuming separate route
 names are sufficient. Reservations participate in routing too.
 
-A separate port is the simplest separation. For same-port hosting, coordinate
-host-matching modes and disjoint prefixes. The Windows integration check uses
-`HostNameComparisonMode.Exact` for WCF at `/legacy/` and an explicit-host
-MiniHttpHost prefix at `/new/`. It checks both endpoints and verifies that WCF
-still responds after MiniHttpHost shuts down.
+A separate port is the intended integration approach here. The Windows check
+hosts WCF and MiniHttpHost in one process on different ports, then verifies WCF
+still responds after MiniHttpHost shuts down. Same-port hosting would require
+additional coordination of host-matching modes and prefixes; it is not required
+by this project or the coexistence test.
 
 URL ACLs and HTTP.sys TLS certificate bindings are system configuration, not
 properties owned by one framework instance. Coordinate them with the existing

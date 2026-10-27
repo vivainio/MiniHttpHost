@@ -27,6 +27,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           netsh http add urlacl url=http://localhost:18083/ sddl='D:(A;;GX;;;WD)'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          netsh http add urlacl url=http://localhost:18084/ sddl='D:(A;;GX;;;WD)'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - run: dotnet build examples/ConsoleHost/ConsoleHost.csproj -c Release
       - run: dotnet build tests/Checks/Checks.csproj -c Release
       - name: Run checks on .NET Framework and HTTP.sys
