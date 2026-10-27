@@ -7,6 +7,7 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Sockets;
 using System.Runtime.Serialization;
+using System.ServiceModel;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -42,6 +43,7 @@ internal static class Program
             File.WriteAllBytes(file, binary);
             await CheckHttpAsync(file, binary);
             await CheckForcedShutdownAsync();
+            if (Type.GetType("Mono.Runtime") == null) await CheckWcfCoexistenceAsync();
             Console.WriteLine("PASS: {0} assertions", assertions);
         }
         finally { File.Delete(file); }
@@ -50,6 +52,7 @@ internal static class Program
     private static async Task CheckHttpAsync(string file, byte[] binary)
     {
         var prefix = Prefix();
+        var ambient = new AsyncLocal<string>();
         var slowEntered = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var slowRelease = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var exits = new List<string>();
@@ -58,6 +61,7 @@ internal static class Program
         var routes = new HttpRouter()
             .MapGet("/files/{id}", c => c.TextAsync(c.RouteValues["id"]))
             .MapGet("/files/new", c => c.TextAsync("literal"))
+            .MapGet("/ambient", c => c.TextAsync(ambient.Value ?? "none"))
             .MapGet("/file", c => c.FileAsync(file))
             .Map("HEAD", "/file", c => c.FileAsync(file))
             .MapGet("/json", c => c.JsonAsync(new Message { Value = "ok" }))
@@ -134,7 +138,9 @@ internal static class Program
                 catch (OperationCanceledException) { cancelledStartup = true; }
                 Check(cancelledStartup, "Startup honors cancellation before opening listener");
             }
+            ambient.Value = "host-operation-context";
             await server.StartAsync();
+            ambient.Value = null;
             bool duplicateStart = false;
             try { await server.StartAsync(); }
             catch (InvalidOperationException) { duplicateStart = true; }
@@ -145,6 +151,7 @@ internal static class Program
                 Check(response.Headers.GetValues("X-Order").Single() == "AB", "Middleware entry order");
             }
             Check(await client.GetStringAsync("files/hello%20world") == "hello world", "Parameter decoding");
+            Check(await client.GetStringAsync("ambient") == "none", "Startup does not leak the host's ambient context");
             Check((await client.GetAsync("missing")).StatusCode == HttpStatusCode.NotFound, "404");
             using (var response = await client.PostAsync("files/123", new ByteArrayContent(new byte[0])))
             {
@@ -265,8 +272,10 @@ internal static class Program
             using (var stream = socket.GetStream())
             {
                 byte[] header = Encoding.ASCII.GetBytes("POST /echo HTTP/1.1\r\nHost: " + uri.Authority +
-                    "\r\nContent-Length: 131072\r\nConnection: close\r\n\r\n");
-                byte[] block = new byte[65536];
+                    "\r\nContent-Length: 196608\r\nConnection: close\r\n\r\n");
+                // Framework HttpListener fills the requested read buffer. Send
+                // more than the helper's 80 KiB buffer, but less than the body.
+                byte[] block = new byte[98304];
                 await stream.WriteAsync(header, 0, header.Length);
                 await stream.WriteAsync(block, 0, block.Length);
                 // A server that buffers the entire request deadlocks here: we
@@ -297,6 +306,37 @@ internal static class Program
         await task;
     }
 
+    private static async Task CheckWcfCoexistenceAsync()
+    {
+        var prefix = Prefix();
+        var binding = new BasicHttpBinding { HostNameComparisonMode = HostNameComparisonMode.Exact };
+        using (var legacy = new ServiceHost(typeof(LegacyProbe), new Uri(prefix + "legacy/")))
+        {
+            legacy.AddServiceEndpoint(typeof(ILegacyProbe), binding, "");
+            legacy.Open();
+            using (var server = new MiniWebServer(prefix + "new/", c => c.TextAsync("new endpoint")))
+            using (var client = new HttpClient(new HttpClientHandler { UseProxy = false }))
+            {
+                await server.StartAsync();
+                Check(await client.GetStringAsync(prefix + "new/ready") == "new endpoint", "HTTP endpoint coexists with WCF on same port");
+                using (var factory = new ChannelFactory<ILegacyProbe>(binding, new EndpointAddress(prefix + "legacy/")))
+                {
+                    var channel = factory.CreateChannel();
+                    try
+                    {
+                        Check(channel.UsesThreadPool(), "WCF uses CLR thread-pool threads");
+                        Check(channel.Echo("before") == "before", "SOAP endpoint responds alongside HTTP endpoint");
+                        await server.StopAsync();
+                        Check(channel.Echo("after") == "after", "Stopping MiniHttpHost leaves WCF listener running");
+                        ((IClientChannel)channel).Close();
+                    }
+                    catch { ((IClientChannel)channel).Abort(); factory.Abort(); throw; }
+                }
+            }
+            legacy.Close();
+        }
+    }
+
     [DataContract]
     private sealed class Message
     {
@@ -308,4 +348,17 @@ internal static class Program
         internal NonSeekableInput(byte[] data) : base(data) { }
         public override bool CanSeek => false;
     }
+}
+
+[ServiceContract]
+public interface ILegacyProbe
+{
+    [OperationContract] string Echo(string value);
+    [OperationContract] bool UsesThreadPool();
+}
+
+public sealed class LegacyProbe : ILegacyProbe
+{
+    public string Echo(string value) => value;
+    public bool UsesThreadPool() => Thread.CurrentThread.IsThreadPoolThread;
 }

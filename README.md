@@ -15,6 +15,8 @@ pool; there are no dedicated accept threads or custom worker pools.
 creates it directly. MiniHttpHost simplifies the layers above the listener by
 using ordinary HTTP handlers and streams in place of WCF's SOAP processing and
 dispatch. Sharing HTTP.sys alone doesn't establish a performance advantage over WCF.
+See the [WCF coexistence review](docs/wcf-coexistence.md) for listener settings,
+URL wildcard precedence, internal scheduling, and shared-process implications.
 
 See Microsoft's [HttpListener documentation](https://learn.microsoft.com/en-us/dotnet/api/system.net.httplistener?view=netframework-4.7.2)
 and [IIS architecture](https://learn.microsoft.com/en-us/iis/get-started/introduction-to-iis/introduction-to-iis-architecture).
@@ -120,7 +122,7 @@ The response helpers are extension methods on the context:
 | --- | --- |
 | `TextAsync(text, statusCode: 200)` | UTF-8 plain text |
 | `JsonAsync(value, statusCode: 200)` | Framework `DataContractJsonSerializer`; buffers small JSON responses |
-| `StreamAsync(source, contentType, contentLength, leaveOpen: true)` | Incremental copy with an 80 KiB buffer; caller retains stream ownership by default |
+| `StreamAsync(source, contentType, contentLength, leaveOpen: true)` | Incremental copy; defaults to an 80 KiB buffer and caller-owned stream |
 | `FileAsync(path, contentType)` | Opens an asynchronous file stream, sends it, and disposes it |
 
 `StreamAsync` infers remaining length from seekable streams. Otherwise, provide a
@@ -128,6 +130,11 @@ length or let it use chunked encoding. `FileAsync` sets content length. These tw
 helpers do not buffer the whole payload. JSON follows the framework serializer's
 contracts: use public DTOs or `[DataContract]` / `[DataMember]` types. It is not an
 automatic model-binding or arbitrary anonymous-object serialization API.
+
+Use `StreamAsync(source, bufferSize: 4096)` for smaller copy chunks; `FileAsync`
+also accepts `bufferSize`. Framework HttpListener can wait to fill a requested
+body-read buffer, so this affects first-chunk latency as well as throughput.
+Flushing the response does not unblock a pending request read.
 
 For lower-level streaming, set response metadata before the first write:
 
@@ -309,8 +316,10 @@ The checks use local HTTP listeners and cover routing, group authorization,
 middleware order, error handling, binary copying, response bytes arriving before
 an upload completes, request limits, route timeouts, and graceful/forced shutdown.
 The Windows GitHub Actions job runs the same executable on .NET Framework against
-HTTP.sys. `MINIHTTPHOST_TEST_PORT` selects the first of two sequential test ports
-when explicit Windows URL reservations are needed.
+HTTP.sys. `MINIHTTPHOST_TEST_PORT` selects the first of three sequential test ports
+when explicit Windows URL reservations are needed. The Windows-only WCF cohosting
+check verifies both protocols can share a process and port with disjoint
+explicit-host prefixes.
 
 Mono 6.14.1 on macOS supports local development, but is not an HTTP.sys substitute.
 An unrestricted chunked request upload previously stalled after the body arrived;

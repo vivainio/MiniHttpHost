@@ -54,14 +54,22 @@ namespace MiniHttpHost
                 }
                 catch { listener.Close(); throw; }
                 // No dedicated accept thread; idle accepts don't occupy a pool thread.
-                var workers = Enumerable.Range(0, concurrency)
-                    .Select(_ => Task.Run(ServeAsync)).ToArray();
-                completion = FinishAsync(workers);
-                // Ensure failures are observed even if a host forgets to monitor Completion.
-                completion.ContinueWith(t => Trace.TraceError("HTTP listener failed: {0}", t.Exception),
-                    CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
+                // A host may start us inside a WCF operation. Don't capture its
+                // ambient principal/logical call context into long-lived workers.
+                if (ExecutionContext.IsFlowSuppressed()) StartWorkers();
+                else using (ExecutionContext.SuppressFlow()) StartWorkers();
             }
             return Task.CompletedTask;
+        }
+
+        private void StartWorkers()
+        {
+            var workers = Enumerable.Range(0, concurrency)
+                .Select(_ => Task.Run(ServeAsync)).ToArray();
+            completion = FinishAsync(workers);
+            // Ensure failures are observed even if a host forgets to monitor Completion.
+            completion.ContinueWith(t => Trace.TraceError("HTTP listener failed: {0}", t.Exception),
+                CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
         }
 
         /// <summary>

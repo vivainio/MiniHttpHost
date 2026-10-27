@@ -37,26 +37,28 @@ namespace MiniHttpHost
         /// </summary>
         public static async Task StreamAsync(this HttpContext context, Stream source,
             string contentType = "application/octet-stream", long? contentLength = null,
-            bool leaveOpen = true, int statusCode = 200)
+            bool leaveOpen = true, int statusCode = 200, int bufferSize = 81920)
         {
             if (source == null) throw new ArgumentNullException(nameof(source));
+            if (bufferSize <= 0) throw new ArgumentOutOfRangeException(nameof(bufferSize));
             try
             {
                 if (!contentLength.HasValue && source.CanSeek)
                     contentLength = source.Length - source.Position;
                 Prepare(context, contentType, contentLength, statusCode);
                 if (!IsHead(context))
-                    await source.CopyToAsync(context.ResponseBody, 81920, context.RequestAborted).ConfigureAwait(false);
+                    await source.CopyToAsync(context.ResponseBody, bufferSize, context.RequestAborted).ConfigureAwait(false);
             }
             finally { if (!leaveOpen) source.Dispose(); }
         }
 
         public static async Task FileAsync(this HttpContext context, string path,
-            string contentType = "application/octet-stream")
+            string contentType = "application/octet-stream", int bufferSize = 81920)
         {
+            if (bufferSize <= 0) throw new ArgumentOutOfRangeException(nameof(bufferSize));
             using (var input = new FileStream(path, FileMode.Open, FileAccess.Read,
-                FileShare.Read, 81920, useAsync: true))
-                await context.StreamAsync(input, contentType, input.Length).ConfigureAwait(false);
+                FileShare.Read, bufferSize, useAsync: true))
+                await context.StreamAsync(input, contentType, input.Length, bufferSize: bufferSize).ConfigureAwait(false);
         }
 
         internal static async Task HandleErrorAsync(HttpContext context, Exception error,
