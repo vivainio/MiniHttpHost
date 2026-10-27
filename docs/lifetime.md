@@ -19,4 +19,3 @@ transfers. Excess traffic waits in the underlying listener backlog. Idle accepts
 and asynchronous I/O don't reserve a pool thread. Keep handlers asynchronous;
 avoid `.Wait()`, `.Result`, and `Thread.Sleep` so they don't starve other work,
 including WCF, in the same process.
-

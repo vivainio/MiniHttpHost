@@ -66,4 +66,3 @@ buffering. Defaults impose no body-size or route-duration limit.
 signals cancellation and aborts the connection; it does not guarantee a 408
 response or forcibly stop application code. It does not configure HTTP.sys
 header, connection, or transport timeouts.
-

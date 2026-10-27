@@ -64,4 +64,3 @@ The [console example](https://github.com/vivainio/MiniHttpHost/blob/main/example
 upload/download handlers. It writes uploads to a temporary file, publishes only
 completed uploads, and streams downloads from disk. Its single resource is
 serialized so a download never reads a partially uploaded replacement.
-

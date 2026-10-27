@@ -69,4 +69,3 @@ On Windows, configure a URL ACL for the actual service account if it lacks
 permission to register the prefix. Configure HTTPS certificates through HTTP.sys.
 The library doesn't change system URL reservations, TLS bindings, or thread-pool
 settings automatically.
-

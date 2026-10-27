@@ -37,4 +37,3 @@ No regex constraints, optional segments, or catch-all parameters are included.
 
 Use uppercase standard methods. Register HEAD explicitly. Unknown paths return
 404; unsupported methods return 405 with `Allow`.
-
