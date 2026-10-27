@@ -1,0 +1,7 @@
+bin/
+obj/
+.dotnet-home/
+.nuget/
+.DS_Store
+mono_crash.*
+core
