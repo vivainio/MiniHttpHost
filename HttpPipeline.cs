@@ -1,15 +1,13 @@
 using System;
 using System.Collections.Generic;
-using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace MiniHttpHost
 {
-    public delegate Task HttpHandler(HttpListenerContext context, CancellationToken cancellationToken);
+    public delegate Task HttpHandler(HttpContext context);
 
-    public delegate Task HttpMiddleware(HttpListenerContext context,
-        CancellationToken cancellationToken, Func<Task> next);
+    public delegate Task HttpMiddleware(HttpContext context, Func<Task> next);
 
     /// <summary>Builds a request pipeline. The first registered middleware runs first.</summary>
     public sealed class HttpPipeline
@@ -24,11 +22,21 @@ namespace MiniHttpHost
             return this;
         }
 
-        /// <summary>
-        /// Takes a snapshot of registered middleware around a terminal handler.
-        /// Later registrations do not change an already-built pipeline.
-        /// </summary>
-        public Func<HttpListenerContext, CancellationToken, Task> Build(HttpHandler terminal)
+        /// <summary>Handles errors without replacing a response that already started.</summary>
+        public HttpPipeline UseExceptionHandler(Action<HttpContext, Exception> log = null)
+        {
+            return Use(async (context, next) =>
+            {
+                try { await next().ConfigureAwait(false); }
+                catch (Exception error)
+                {
+                    await HttpResponses.HandleErrorAsync(context, error, log).ConfigureAwait(false);
+                }
+            });
+        }
+
+        /// <summary>Takes a snapshot; later registrations do not change this handler.</summary>
+        public HttpHandler Build(HttpHandler terminal)
         {
             if (terminal == null) throw new ArgumentNullException(nameof(terminal));
             HttpMiddleware[] snapshot;
@@ -39,10 +47,18 @@ namespace MiniHttpHost
             {
                 var component = snapshot[i];
                 var downstream = current;
-                current = (context, token) => component(context, token,
-                    () => downstream(context, token));
+                current = context =>
+                {
+                    int called = 0;
+                    return component(context, () =>
+                    {
+                        if (Interlocked.Exchange(ref called, 1) != 0)
+                            throw new InvalidOperationException("Middleware may call next only once per request.");
+                        return downstream(context);
+                    });
+                };
             }
-            return (context, token) => current(context, token);
+            return current;
         }
     }
 }

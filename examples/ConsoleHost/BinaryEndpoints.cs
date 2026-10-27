@@ -1,6 +1,5 @@
 using System;
 using System.IO;
-using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -20,8 +19,9 @@ namespace MiniHttpHost.Examples
             path = Path.Combine(directory, "payload.bin");
         }
 
-        public async Task UploadAsync(HttpListenerContext context, CancellationToken token)
+        public async Task UploadAsync(HttpContext context)
         {
+            var token = context.RequestAborted;
             await access.WaitAsync(token).ConfigureAwait(false);
             var temporaryPath = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
             try
@@ -29,7 +29,7 @@ namespace MiniHttpHost.Examples
                 using (var output = new FileStream(temporaryPath, FileMode.CreateNew,
                     FileAccess.Write, FileShare.None, BufferSize, useAsync: true))
                 {
-                    await context.Request.InputStream.CopyToAsync(output, BufferSize, token).ConfigureAwait(false);
+                    await context.RequestBody.CopyToAsync(output, BufferSize, token).ConfigureAwait(false);
                 }
                 token.ThrowIfCancellationRequested();
                 // Publish only a completed upload; preserve the old file on a
@@ -46,8 +46,9 @@ namespace MiniHttpHost.Examples
             }
         }
 
-        public async Task DownloadAsync(HttpListenerContext context, CancellationToken token)
+        public async Task DownloadAsync(HttpContext context)
         {
+            var token = context.RequestAborted;
             await access.WaitAsync(token).ConfigureAwait(false);
             try
             {
@@ -57,13 +58,7 @@ namespace MiniHttpHost.Examples
                     context.Response.ContentLength64 = 0;
                     return;
                 }
-                using (var input = new FileStream(path, FileMode.Open, FileAccess.Read,
-                    FileShare.Read, BufferSize, useAsync: true))
-                {
-                    context.Response.ContentType = "application/octet-stream";
-                    context.Response.ContentLength64 = input.Length;
-                    await input.CopyToAsync(context.Response.OutputStream, BufferSize, token).ConfigureAwait(false);
-                }
+                await context.FileAsync(path).ConfigureAwait(false);
             }
             finally { access.Release(); }
         }

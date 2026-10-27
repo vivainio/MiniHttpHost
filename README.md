@@ -1,201 +1,317 @@
 # MiniHttpHost
 
-Minimal HttpListener library targeting .NET Framework 4.7.2, with no runtime packages.
+A small, embeddable HTTP server for .NET Framework 4.7.2. Add ordinary HTTP
+endpoints to an existing application, including a monolith moving away from WCF.
+No runtime NuGet dependencies, controller discovery, or DI container required.
 
 **On Windows, MiniHttpHost uses HTTP.sys, the kernel-mode HTTP server stack also
 used by IIS to host ASP.NET applications.** `HttpListener` exposes that Windows
-infrastructure directly, so the library can live inside your existing process
-without requiring an IIS deployment. Request handlers and middleware run in your
-application on the shared managed thread pool.
+infrastructure directly, so the library lives inside your existing process
+without requiring an IIS deployment. Handlers run on the shared managed thread
+pool; there are no dedicated accept threads or custom worker pools.
 
 See Microsoft's [HttpListener documentation](https://learn.microsoft.com/en-us/dotnet/api/system.net.httplistener?view=netframework-4.7.2)
 and [IIS architecture](https://learn.microsoft.com/en-us/iis/get-started/introduction-to-iis/introduction-to-iis-architecture).
 ASP.NET Core's default standalone server is Kestrel; the shared HTTP.sys foundation
-described here applies to IIS hosting and Windows HttpListener. Mono on macOS uses
-a different implementation.
+here applies to Windows HttpListener and IIS hosting. Mono uses a different
+implementation. See [the framework comparison](docs/framework-comparison.md).
 
-Build using the .NET SDK (the reference-assemblies package supplies the Windows
-compile-time API surface on macOS):
+## Build and embed
 
 ```sh
 dotnet build -c Release
 ```
 
-Reference `bin/Release/net472/MiniHttpHost.dll` in your application and copy it
-alongside the application executable. No NuGet packages are needed at runtime.
-Alternatively, add a project reference to `MiniHttpHost.csproj`.
+Reference `bin/Release/net472/MiniHttpHost.dll` and copy it alongside your
+application executable, or add a project reference to `MiniHttpHost.csproj`.
+The reference-assemblies NuGet package is needed only at build time, including
+when building on macOS with the .NET SDK.
 
-The account needs permission to register
-the URL prefix; configure a URL ACL for the actual service account if necessary.
-Mono's macOS HTTP implementation differs from Windows HTTP.sys; verify Windows
-hosting separately.
-Local Mono 6.14.1 checks passed a 32 MiB fixed-length upload/download and an
-incremental chunked response. A chunked request upload stalled after receiving the
-body; verify chunked requests on Windows and use fixed-length uploads for local
-Mono development. The library passes request streams through without decoding
-HTTP framing itself.
-
-Create a server with your own handler, then retain the running task for your
-application's lifetime:
+Your hosting component owns the server's lifetime:
 
 ```csharp
 using MiniHttpHost;
+using System;
 using System.Net;
-using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
 
-// Fields on your application's hosting component:
-private readonly CancellationTokenSource webStopping = new CancellationTokenSource();
-private Task webTask;
+// Instance field on your application's hosting component:
+private MiniWebServer server;
 
-public void StartWebServer()
+public async Task StartHttpAsync()
 {
     var routes = new HttpRouter()
-        .MapGet("/hello", HandleRequestAsync)
-        .MapPost("/echo", EchoAsync);
-    var server = new MiniWebServer("http://localhost:8080/", routes.HandleAsync,
-        concurrency: 16);
-    webTask = server.RunAsync(webStopping.Token);
-}
+        .MapGet("/hello/{name}", context =>
+            context.TextAsync("Hello, " + context.RouteValues["name"] + "!"))
+        .MapPost("/echo", context => context.StreamAsync(context.RequestBody),
+            new HttpRouteOptions {
+                MaxRequestBodyBytes = 4L * 1024 * 1024 * 1024,
+                Timeout = TimeSpan.FromMinutes(30)
+            });
 
-public async Task StopWebServerAsync()
-{
-    webStopping.Cancel();
+    var handler = new HttpPipeline()
+        .UseExceptionHandler()
+        .Build(routes.HandleAsync);
+
+    server = new MiniWebServer("http://localhost:8080/", handler, concurrency: 16);
     try
     {
-        if (webTask != null) await webTask.ConfigureAwait(false);
+        await server.StartAsync(); // Completes when the listener is ready.
     }
-    finally
+    catch (HttpListenerException)
     {
-        webStopping.Dispose();
+        server.Dispose();
+        // Log/report startup failure in your host; don't continue as if listening.
+        throw;
+    }
+    catch
+    {
+        server.Dispose();
+        throw;
     }
 }
 
-private async Task HandleRequestAsync(HttpListenerContext context,
-    CancellationToken cancellationToken)
+public async Task StopHttpAsync()
 {
-    byte[] body = Encoding.UTF8.GetBytes("Hello from the application!\n");
-    context.Response.ContentType = "text/plain; charset=utf-8";
-    context.Response.ContentLength64 = body.Length;
-    await context.Response.OutputStream.WriteAsync(body, 0, body.Length,
-        cancellationToken).ConfigureAwait(false);
-}
-
-private async Task EchoAsync(HttpListenerContext context, CancellationToken token)
-{
-    context.Response.ContentType = "application/octet-stream";
-    context.Response.SendChunked = true; // Response length is not known upfront.
-    await context.Request.InputStream.CopyToAsync(
-        context.Response.OutputStream, 81920, token).ConfigureAwait(false);
+    try { await server.StopAsync(TimeSpan.FromSeconds(30)); }
+    finally { server.Dispose(); }
 }
 ```
 
-This example assumes startup and shutdown each happen once, in order. Monitor
-`webTask` for faults during the host's lifetime as well as awaiting it at shutdown.
-All request handlers can run concurrently, so synchronize shared application state.
-Handlers can be instance methods (as above) or lambdas, with dependencies passed
-through your own constructor. Nothing requires static application state.
+Start and stop once, in order. Monitor `server.Completion` for unexpected listener
+failures during the application's lifetime. Handlers can be instance methods or
+lambdas with constructor-injected application services; no static request state
+is required. All handlers may run concurrently, so synchronize shared state.
 
-## Routes and streaming binary data
+On Windows, configure a URL ACL for the actual service account if it lacks
+permission to register the prefix. Configure HTTPS certificates through HTTP.sys.
+The library doesn't change system URL reservations, TLS bindings, or thread-pool
+settings automatically.
 
-`HttpRouter.MapGet`, `MapPost`, and `Map(method, path, handler)` register handlers.
-Paths match `Request.Url.AbsolutePath` exactly, including any listener base path;
-they are case-sensitive, ignore the query string, and distinguish trailing slashes.
-Methods are case-sensitive: use uppercase standard methods. Register HEAD explicitly
-if needed. Unknown paths return 404; an unsupported method returns 405 with `Allow`.
-Duplicate registrations throw. Path parameters and wildcard routes are not included.
+## Request context and streaming
 
-Request bodies are exposed as `context.Request.InputStream` and responses as
-`context.Response.OutputStream`. The library never buffers the whole body. Await
-reads/writes or `CopyToAsync` to stream with bounded memory and backpressure.
-Keep all stream work within the handler's task; the server closes the response
-when that task completes. Set headers before writing the first byte. Use
-`ContentLength64` when the response length is known, or `SendChunked = true` for
-unknown lengths. For incremental messages, flush the output after each message.
-Handlers can accept fixed-length or chunked request bodies without requiring a
-known `ContentLength64`. There is no library-imposed payload-size limit; a host
-can enforce its own limits/timeouts while reading.
+Every handler receives one `MiniHttpHost.HttpContext`:
 
-The console example registers instance methods on `BinaryEndpoints`:
+| Member | Purpose |
+| --- | --- |
+| `Request`, `Response` | Native HttpListener metadata, status, and headers |
+| `RequestBody`, `ResponseBody` | Streaming bodies with byte-limit/start tracking |
+| `RouteValues` | Decoded parameters for the selected route |
+| `Items` | Per-request state shared by middleware and handlers |
+| `RequestAborted` | Cancellation from host abort or the selected route's deadline |
+| `HasStarted` | Records a response-body write or flush; errors must no longer replace the response |
+| `NativeContext` | Escape hatch to the underlying HttpListener context |
+
+Use `RequestBody` and `ResponseBody` for body I/O. Reading `Request.InputStream`
+or writing `Response.OutputStream` directly bypasses the wrappers' byte counting
+or response-start tracking. Native HttpListener does not expose a client-disconnect
+token: peer disconnections surface through failed I/O, rather than guaranteed
+proactive cancellation of `RequestAborted`.
+
+The response helpers are extension methods on the context:
+
+| Helper | Behavior |
+| --- | --- |
+| `TextAsync(text, statusCode: 200)` | UTF-8 plain text |
+| `JsonAsync(value, statusCode: 200)` | Framework `DataContractJsonSerializer`; buffers small JSON responses |
+| `StreamAsync(source, contentType, contentLength, leaveOpen: true)` | Incremental copy with an 80 KiB buffer; caller retains stream ownership by default |
+| `FileAsync(path, contentType)` | Opens an asynchronous file stream, sends it, and disposes it |
+
+`StreamAsync` infers remaining length from seekable streams. Otherwise, provide a
+length or let it use chunked encoding. `FileAsync` sets content length. These two
+helpers do not buffer the whole payload. JSON follows the framework serializer's
+contracts: use public DTOs or `[DataContract]` / `[DataMember]` types. It is not an
+automatic model-binding or arbitrary anonymous-object serialization API.
+
+For lower-level streaming, set response metadata before the first write:
 
 ```csharp
-var binary = new BinaryEndpoints(storageDirectory);
-var routes = new HttpRouter()
-    .MapPost("/binary", binary.UploadAsync)
-    .MapGet("/binary", binary.DownloadAsync);
-var server = new MiniWebServer("http://localhost:8080/", routes.HandleAsync);
-Task running = server.RunAsync(hostStoppingToken);
+public async Task UploadAsync(MiniHttpHost.HttpContext context)
+{
+    using (var destination = OpenApplicationStorage())
+    {
+        await context.RequestBody.CopyToAsync(destination, 81920,
+            context.RequestAborted).ConfigureAwait(false);
+    }
+    context.Response.StatusCode = 204;
+    context.Response.ContentLength64 = 0;
+}
 ```
 
-`BinaryEndpoints` is sample application code in `examples/ConsoleHost`, not part
-of the DLL. It streams uploads to a temporary file, publishes completed uploads,
-and streams downloads from disk using 80 KiB copy buffers. It serializes access
-to its single resource so downloads never read a partial upload. Your application
-can register handlers for its own storage or data source instead.
+`OpenApplicationStorage` represents your application's writable stream. For
+incremental responses, write to `ResponseBody` and flush after each message.
+Await all stream work inside the handler: the server closes the response when
+the handler returns. Helpers suppress the body for explicitly registered HEAD
+routes. Range requests, resumable downloads, and static-file serving are not
+implemented.
 
-## Middleware
+The [console example](examples/ConsoleHost/BinaryEndpoints.cs) registers instance
+upload/download handlers. It writes uploads to a temporary file, publishes only
+completed uploads, and streams downloads from disk. Its single resource is
+serialized so a download never reads a partially uploaded replacement.
 
-Wrap the router with middleware, using instance methods or lambdas:
+## Routing and groups
+
+```csharp
+var api = new MyApi(applicationService);
+var routes = new HttpRouter();
+var group = routes.MapGroup("/api/v1")
+    .Use(async (context, next) =>
+    {
+        if (!authorization.IsAllowed(context.Request))
+        {
+            await context.TextAsync("Forbidden", 403);
+            return;
+        }
+        context.Items["caller"] = authorization.GetCaller(context.Request);
+        await next().ConfigureAwait(false);
+    });
+
+group.MapGet("/files/{id}", api.DownloadAsync);
+group.MapPost("/files/{id}", api.UploadAsync,
+    new HttpRouteOptions {
+        MaxRequestBodyBytes = 4L * 1024 * 1024 * 1024,
+        Timeout = TimeSpan.FromMinutes(30)
+    });
+```
+
+`MyApi` and `authorization` are application-owned services. `MapGet`, `MapPost`,
+and `Map(method, path, handler)` support literal paths and whole-segment `{name}`
+parameters. Groups may be nested. Configure group middleware before mapping its
+routes: each registration snapshots the group's pipeline and route options.
+
+Paths are case-sensitive, ignore queries, and distinguish trailing slashes.
+They include any listener base path. Parameters are decoded once, after splitting
+path segments; empty segments don't match parameters. Literal segments outrank
+parameters, comparing from left to right among matching methods. Equivalent
+method/pattern registrations are rejected even if parameter names differ.
+No regex constraints, optional segments, or catch-all parameters are included.
+
+Use uppercase standard methods. Register HEAD explicitly. Unknown paths return
+404; unsupported methods return 405 with `Allow`.
+
+## Middleware, errors, and limits
 
 ```csharp
 var handler = new HttpPipeline()
-    .Use(async (context, token, next) =>
+    .UseExceptionHandler((context, error) => logger.Log(error))
+    .Use(async (context, next) =>
     {
-        // Set headers before the downstream handler starts streaming.
+        try { await next().ConfigureAwait(false); }
+        catch (System.IO.FileNotFoundException) when (!context.HasStarted)
+        {
+            // Map a known application error before streaming starts.
+            await context.TextAsync("Not found", 404).ConfigureAwait(false);
+        }
+    })
+    .Use(async (context, next) =>
+    {
         context.Response.Headers["X-Application"] = "MyApp";
         await next().ConfigureAwait(false);
     })
-    .Use(async (context, token, next) =>
-    {
-        if (!myAuthorizationService.IsAllowed(context.Request))
-        {
-            context.Response.StatusCode = 403;
-            context.Response.ContentLength64 = 0;
-            return; // Short-circuit: the route handler is not invoked.
-        }
-        await next().ConfigureAwait(false);
-    })
     .Build(routes.HandleAsync);
-
-var server = new MiniWebServer("http://localhost:8080/", handler);
 ```
 
-With A then B registered, execution is A → B → route → B → A. `Build` takes a
-snapshot; later `Use` calls do not affect the built handler. Middleware is shared
-across requests, but its context and `next` callback belong to the current request.
-Await `next()` at most once, or return without calling it. Do not retain it after
-the middleware task completes. Middleware must not dispose the request/response
-streams. Reading a request body consumes it; the library does not rewind it.
-Post-processing can log timing or errors, but headers/status cannot be changed
-once downstream code has started sending a streamed response.
+A then B runs as A → B → route → B → A. `Build` snapshots global middleware;
+subsequent registrations do not affect the built handler. Middleware can return
+without calling `next` to short-circuit. Await `next` at most once, and do not
+retain it after the middleware returns. Request streams are not rewindable and
+middleware must not dispose the server-owned bodies.
 
-Supply an asynchronous handler; the server closes
-each response after the handler returns. Observe the returned task for startup or
-listener failures. Use a new server instance for each run.
+Errors before a response starts become a generic 500; body-limit failures become
+413. Once streaming starts, errors abort the response rather than append an
+error page to binary data. The server also has this fallback when no exception
+middleware is installed. `UseExceptionHandler` allows an application logging
+callback, with `Trace` used by default. Cancellation aborts the connection.
 
-The default 16 async loops handle up to 16 requests concurrently using the shared
-managed thread pool. Waiting for requests or asynchronous I/O does not reserve a
-worker thread. No dedicated threads or custom thread pools are created. Keep
-handlers asynchronous and avoid `.Wait()`, `.Result`, and `Thread.Sleep`.
+The `!context.HasStarted` filter is essential: a failed partial download must not
+be replaced with a 404 body. Such errors reach the outer exception handler, which
+logs and aborts the stream. The [console host](examples/ConsoleHost/Program.cs)
+also catches startup and listener-lifetime failures at its entry point, reports
+them on stderr, and returns a nonzero exit code. Request failures are handled
+inside the pipeline so a failed request does not terminate the host. Try
+`GET /example-error` to see its generic 500 response and application-side log.
 
-Cancellation stops the listener and aborts active HTTP responses, then waits for
-handlers to return. Handlers must honor the token. This is immediate shutdown,
-not graceful draining. Handler failures are traced and their responses aborted.
-Excess traffic waits in the underlying listener backlog; this is not a custom
-overload/503 policy. Authentication, static files, and WCF are out of scope.
+In your application's lifetime coordinator, explicitly observe listener failures:
 
-## Console example on macOS
+```csharp
+try
+{
+    // hostStopping is your application's shutdown signal/task.
+    await Task.WhenAny(hostStopping, server.Completion).ConfigureAwait(false);
+    await server.StopAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+}
+catch (Exception error)
+{
+    logger.Log(error);
+    throw; // Let your application decide how to report/recover from a host failure.
+}
+finally { server.Dispose(); }
+```
 
-The console host is a separate project and is not compiled into the library:
+`MaxRequestBodyBytes` rejects an oversized declared length before invoking the
+route. For unknown lengths, the request wrapper counts bytes as they are read.
+Limits are enforced through `RequestBody`; there is no automatic whole-body
+buffering. Defaults impose no body-size or route-duration limit.
+
+`Timeout` starts after route selection and includes its group middleware. Expiry
+signals cancellation and aborts the connection; it does not guarantee a 408
+response or forcibly stop application code. It does not configure HTTP.sys
+header, connection, or transport timeouts.
+
+## Lifetime and concurrency
+
+`StartAsync` completes when the listener starts. Its token controls startup, not
+the server's entire lifetime. `Completion` represents the worker loops' lifetime.
+
+`StopAsync` stops admitting application work, drains active handlers for 30 seconds
+by default, and aborts remaining connections/signals cancellation at the deadline.
+While draining, newly accepted requests receive 503. Because HttpListener can't
+stop accepts separately from active responses, requests still in the underlying
+backlog may instead see a closed connection when draining finishes. A handler
+that ignores cancellation can outlive `StopAsync`; observe `Completion` for its
+eventual exit. `Dispose` aborts immediately. Use a new server instance to restart.
+
+`RunAsync(lifetimeToken)` remains a convenience for running until cancellation;
+that cancellation aborts immediately rather than gracefully draining.
+
+The default 16 asynchronous loops bound concurrent handlers, including long
+transfers. Excess traffic waits in the underlying listener backlog. Idle accepts
+and asynchronous I/O don't reserve a pool thread. Keep handlers asynchronous;
+avoid `.Wait()`, `.Result`, and `Thread.Sleep` so they don't starve other work,
+including WCF, in the same process.
+
+## Develop and check
 
 ```sh
-dotnet build examples/ConsoleHost/ConsoleHost.csproj
-mono examples/ConsoleHost/bin/Debug/net472/ConsoleHost.exe
-curl -i http://localhost:8080/
+dotnet build examples/ConsoleHost/ConsoleHost.csproj -c Release
+mono examples/ConsoleHost/bin/Release/net472/ConsoleHost.exe
 curl --data-binary @large.bin http://localhost:8080/binary
 curl -o downloaded.bin http://localhost:8080/binary
 curl --data-binary @large.bin http://localhost:8080/echo -o echoed.bin
+curl http://localhost:8080/api/status
 ```
 
-Use Ctrl+C to stop it. On Windows, run `ConsoleHost.exe` directly.
+Use Ctrl+C to stop the example. On Windows, run the executable directly.
+
+```sh
+dotnet build tests/Checks/Checks.csproj -c Release
+mono tests/Checks/bin/Release/net472/Checks.exe
+```
+
+The checks use local HTTP listeners and cover routing, group authorization,
+middleware order, error handling, binary copying, response bytes arriving before
+an upload completes, request limits, route timeouts, and graceful/forced shutdown.
+The Windows GitHub Actions job runs the same executable on .NET Framework against
+HTTP.sys. `MINIHTTPHOST_TEST_PORT` selects the first of two sequential test ports
+when explicit Windows URL reservations are needed.
+
+Mono 6.14.1 on macOS supports local development, but is not an HTTP.sys substitute.
+An unrestricted chunked request upload previously stalled after the body arrived;
+use fixed-length uploads for local Mono development and verify chunked requests
+on Windows. Incremental chunked responses and early rejection of oversized chunked
+requests pass locally.
+
+The current context-based handler API replaces the initial raw-context/two-argument
+API: handlers now receive `HttpContext`, and use `context.RequestAborted` for the
+token. Existing application services can stay instance-based.

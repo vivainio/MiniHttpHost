@@ -7,6 +7,8 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Remove="examples/**/*.cs" />
+    <Compile Remove="tests/**/*.cs" />
+    <Reference Include="System.Runtime.Serialization" />
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
   </ItemGroup>
 </Project>
