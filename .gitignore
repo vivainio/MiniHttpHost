@@ -5,3 +5,6 @@ obj/
 .DS_Store
 mono_crash.*
 core
+site/
+.cache/
+.venv-docs/
