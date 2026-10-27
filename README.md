@@ -10,6 +10,12 @@ infrastructure directly, so the library lives inside your existing process
 without requiring an IIS deployment. Handlers run on the shared managed thread
 pool; there are no dedicated accept threads or custom worker pools.
 
+**Self-hosted WCF over HTTP uses the same `System.Net.HttpListener`.** Microsoft's
+[WCF HTTP transport source](https://github.com/microsoft/referencesource/blob/main/System.ServiceModel/System/ServiceModel/Channels/SharedHttpTransportManager.cs)
+creates it directly. MiniHttpHost simplifies the layers above the listener by
+using ordinary HTTP handlers and streams in place of WCF's SOAP processing and
+dispatch. Sharing HTTP.sys alone doesn't establish a performance advantage over WCF.
+
 See Microsoft's [HttpListener documentation](https://learn.microsoft.com/en-us/dotnet/api/system.net.httplistener?view=netframework-4.7.2)
 and [IIS architecture](https://learn.microsoft.com/en-us/iis/get-started/introduction-to-iis/introduction-to-iis-architecture).
 ASP.NET Core's default standalone server is Kestrel; the shared HTTP.sys foundation
