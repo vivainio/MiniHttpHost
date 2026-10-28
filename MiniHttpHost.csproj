@@ -21,6 +21,7 @@
     <None Include="PACKAGE.md" Pack="true" PackagePath="/" />
   </ItemGroup>
   <ItemGroup Condition="'$(TargetFramework)' == 'net472'">
+    <PackageReference Include="System.Memory" Version="4.5.5" />
     <Reference Include="System.Runtime.Serialization" />
     <Reference Include="System.IO.Compression" />
     <Reference Include="System.Net.Http" />

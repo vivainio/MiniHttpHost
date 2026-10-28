@@ -1,7 +1,6 @@
 using System;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
 using System.Net.Http.Headers;
 using System.Threading;
 using System.Threading.Tasks;
@@ -75,8 +74,21 @@ namespace MiniHttpHost
         private static void AddVary(HttpContext context)
         {
             string existing = context.Response.Headers["Vary"];
-            if ((existing ?? "").Split(',').Any(v => v.Trim() == "*" || v.Trim().Equals("Accept-Encoding", StringComparison.OrdinalIgnoreCase))) return;
+            if (ContainsToken(existing, "*") || ContainsToken(existing, "Accept-Encoding")) return;
             context.Response.Headers["Vary"] = string.IsNullOrWhiteSpace(existing) ? "Accept-Encoding" : existing + ", Accept-Encoding";
+        }
+
+        private static bool ContainsToken(string header, string token)
+        {
+            ReadOnlySpan<char> remaining = header.AsSpan();
+            while (true)
+            {
+                int comma = remaining.IndexOf(',');
+                var item = comma < 0 ? remaining : remaining.Slice(0, comma);
+                if (item.Trim().Equals(token.AsSpan(), StringComparison.OrdinalIgnoreCase)) return true;
+                if (comma < 0) return false;
+                remaining = remaining.Slice(comma + 1);
+            }
         }
 
         private sealed class EncodingNotAcceptableException : Exception { }
@@ -120,7 +132,7 @@ namespace MiniHttpHost
                     string.IsNullOrEmpty(context.Response.Headers["Content-Digest"]) &&
                     string.IsNullOrEmpty(context.Response.Headers["Digest"]) &&
                     string.IsNullOrEmpty(context.Response.Headers["Repr-Digest"]) &&
-                    !(context.Response.Headers["Cache-Control"] ?? "").Split(',').Any(v => v.Trim().Equals("no-transform", StringComparison.OrdinalIgnoreCase)) &&
+                    !ContainsToken(context.Response.Headers["Cache-Control"], "no-transform") &&
                     Compressible(context.Response.ContentType) &&
                     (context.Response.SendChunked || context.Response.ContentLength64 != 0);
                 if (acceptCoding && eligible)
@@ -138,12 +150,21 @@ namespace MiniHttpHost
 
             private static bool Compressible(string contentType)
             {
-                string type = (contentType ?? "").Split(';')[0].Trim().ToLowerInvariant();
-                if (type.Length == 0 || type == "text/event-stream") return false;
-                if (type.StartsWith("image/") && type != "image/svg+xml") return false;
-                return !type.StartsWith("audio/") && !type.StartsWith("video/") &&
-                    type != "application/zip" && type != "application/gzip" && type != "application/x-gzip" &&
-                    type != "application/x-7z-compressed" && type != "application/x-rar-compressed" && type != "application/pdf";
+                ReadOnlySpan<char> type = contentType.AsSpan();
+                int separator = type.IndexOf(';');
+                if (separator >= 0) type = type.Slice(0, separator);
+                type = type.Trim();
+                if (type.Length == 0 || type.Equals("text/event-stream".AsSpan(), StringComparison.OrdinalIgnoreCase)) return false;
+                if (type.StartsWith("image/".AsSpan(), StringComparison.OrdinalIgnoreCase) &&
+                    !type.Equals("image/svg+xml".AsSpan(), StringComparison.OrdinalIgnoreCase)) return false;
+                return !type.StartsWith("audio/".AsSpan(), StringComparison.OrdinalIgnoreCase) &&
+                    !type.StartsWith("video/".AsSpan(), StringComparison.OrdinalIgnoreCase) &&
+                    !type.Equals("application/zip".AsSpan(), StringComparison.OrdinalIgnoreCase) &&
+                    !type.Equals("application/gzip".AsSpan(), StringComparison.OrdinalIgnoreCase) &&
+                    !type.Equals("application/x-gzip".AsSpan(), StringComparison.OrdinalIgnoreCase) &&
+                    !type.Equals("application/x-7z-compressed".AsSpan(), StringComparison.OrdinalIgnoreCase) &&
+                    !type.Equals("application/x-rar-compressed".AsSpan(), StringComparison.OrdinalIgnoreCase) &&
+                    !type.Equals("application/pdf".AsSpan(), StringComparison.OrdinalIgnoreCase);
             }
 
             public override void Write(byte[] buffer, int offset, int count)

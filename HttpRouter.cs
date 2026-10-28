@@ -124,24 +124,23 @@ namespace MiniHttpHost
                 Signature = string.Join("/", Segments.Select((s, i) => Names[i] == null ? s : "{}"));
             }
 
-            // Compare slices in place: works on net472 without allocating split strings.
+            // Keep spans in this synchronous helper; only captured values become strings.
             internal bool Matches(string path)
             {
-                int start = 0;
+                ReadOnlySpan<char> remaining = path.AsSpan();
                 for (int i = 0; i < Segments.Length; i++)
                 {
-                    int end = path.IndexOf('/', start);
+                    int end = remaining.IndexOf('/');
                     bool last = end < 0;
                     if (last != (i == Segments.Length - 1)) return false;
-                    if (last) end = path.Length;
-                    int length = end - start;
+                    if (last) end = remaining.Length;
+                    var segment = remaining.Slice(0, end);
                     if (Names[i] == null)
                     {
-                        if (length != Segments[i].Length ||
-                            string.CompareOrdinal(path, start, Segments[i], 0, length) != 0) return false;
+                        if (!segment.SequenceEqual(Segments[i].AsSpan())) return false;
                     }
-                    else if (length == 0) return false;
-                    start = end + 1;
+                    else if (segment.IsEmpty) return false;
+                    if (!last) remaining = remaining.Slice(end + 1);
                 }
                 return true;
             }

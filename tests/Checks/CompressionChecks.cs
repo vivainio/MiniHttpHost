@@ -31,6 +31,23 @@ internal static partial class Program
             .MapGet("/json", c => c.JsonAsync(new Message { Value = text }), enabled)
             .MapGet("/stream", c => c.StreamAsync(new MemoryStream(bytes), leaveOpen: false), enabled)
             .MapGet("/png", c => c.StreamAsync(new MemoryStream(bytes), "image/png", leaveOpen: false), enabled)
+            .MapGet("/mixed-svg", c => c.BytesAsync(bytes, "IMAGE/SVG+XML; charset=utf-8"), enabled)
+            .MapGet("/mixed-png", c => c.BytesAsync(bytes, "IMAGE/PNG; parameter=value"), enabled)
+            .MapGet("/mixed-cache", c =>
+            {
+                c.Response.Headers["Cache-Control"] = "public,  NO-TRANSFORM  ";
+                return c.TextAsync(text);
+            }, enabled)
+            .MapGet("/cache-prefix", c =>
+            {
+                c.Response.Headers["Cache-Control"] = "no-transform-extra";
+                return c.TextAsync(text);
+            }, enabled)
+            .MapGet("/vary-existing", c =>
+            {
+                c.Response.Headers["Vary"] = "Origin, accept-encoding";
+                return c.TextAsync(text);
+            }, enabled)
             .MapGet("/encoded", c =>
             {
                 c.Response.Headers["Content-Encoding"] = "gzip";
@@ -98,12 +115,18 @@ internal static partial class Program
                     Check(response.Headers.Vary.Contains("Accept-Encoding"), "Identity variant includes Vary");
                 }
             }
-            foreach (var path in new[] { "plain", "png", "etag", "cache" })
+            foreach (var path in new[] { "plain", "png", "etag", "cache", "mixed-png", "mixed-cache" })
                 using (var response = await CompressionRequestAsync(client, path, "gzip"))
                 {
                     Check(!response.Content.Headers.ContentEncoding.Any(), "Skip compression: " + path);
                     Check((await response.Content.ReadAsByteArrayAsync()).SequenceEqual(bytes), "Skipped body unchanged: " + path);
                 }
+            foreach (var path in new[] { "mixed-svg", "cache-prefix" })
+                using (var response = await CompressionRequestAsync(client, path, "gzip"))
+                    Check(DecodeGzip(await response.Content.ReadAsByteArrayAsync()).SequenceEqual(bytes), "Span parsing preserves compressible response: " + path);
+            using (var response = await CompressionRequestAsync(client, "vary-existing", "gzip"))
+                Check(response.Headers.Vary.Count(v => v.Equals("Accept-Encoding", StringComparison.OrdinalIgnoreCase)) == 1,
+                    "Vary token scan avoids case-insensitive duplicates");
             using (var response = await CompressionRequestAsync(client, "stream", "gzip"))
                 Check(DecodeGzip(await response.Content.ReadAsByteArrayAsync()).SequenceEqual(bytes), "Stream helper compression");
             using (var response = await CompressionRequestAsync(client, "json", "gzip"))
