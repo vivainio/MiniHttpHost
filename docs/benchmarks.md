@@ -18,7 +18,7 @@ self-hosting is Framework-only in this repository. The ASP.NET Core server is in
 | CPU | Intel family 6, model 170, 22 logical processors |
 | Runtime | .NET Framework, CLR `4.0.30319.42000`, net472 build (client, MiniHttpHost, WCF). ASP.NET Core: self-contained .NET `10.0.3`, win-x64, Server GC |
 | Date | 2026-10-28 |
-| Commit | `f34bec3` (library, before the ASP.NET Core server was added); library default `4096` from `4ec526d` |
+| Library commit | `f34bec3` |
 
 ## Method
 
@@ -99,8 +99,8 @@ weak too. The p95 discussion under Limitations applies.
   Its concurrent throughput there is only 40% below MiniHttpHost's, though. The two
   measurements disagree for that cell. The cause was not investigated, so don't draw a
   conclusion from either number alone.
-- The 1 KiB echo gap was investigated earlier. An 80 KiB copy buffer halved throughput at that
-  size, which is why small echoes use 4 KiB.
+- At 1 KiB, an 80 KiB copy buffer measured half the throughput of a 4 KiB buffer,
+  which is why small echoes use 4 KiB.
 - p95 values are noisy. At 1 MiB echo, one WCF round was far above the others, so the
   p95 comparison is weaker than the throughput comparison.
 

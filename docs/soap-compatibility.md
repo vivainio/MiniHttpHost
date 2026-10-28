@@ -3,9 +3,8 @@
 A runnable [SOAP 1.1 pattern](https://github.com/vivainio/MiniHttpHost/tree/main/patterns/HttpPatterns)
 shows explicit action/body dispatch, a typed greeting reply, and SOAP faults.
 
-This is an application integration idea, not a SOAP implementation in MiniHttpHost.
-An existing client already generates SOAP; it could change its destination to one
-ordinary POST endpoint while keeping that serializer and message types.
+An application-owned adapter can accept SOAP at an ordinary POST endpoint,
+reusing an existing client's serializer and message contracts.
 
 ```csharp
 routes.MapPost("/legacy-message", soapAdapter.HandleAsync,
@@ -15,18 +14,13 @@ routes.MapPost("/legacy-message", soapAdapter.HandleAsync,
     });
 ```
 
-`soapAdapter` is application-owned code. Its job would be to:
+`soapAdapter` performs these steps:
 
 1. Read the envelope from `context.RequestBody` with an XML reader.
 2. Select a registered handler from the SOAP action or body element's namespace/name.
 3. Deserialize the expected, registered message type.
 4. Invoke an ordinary instance method using the application's existing services.
 5. Return the SOAP response or fault shape the client expects.
-
-The transport stays an ordinary HTTP POST. This need not recreate ServiceHost,
-WCF dispatch behaviors, or its instance/session model. One-way messages are simpler
-because there is no typed reply to reproduce; the expected HTTP acknowledgment
-still needs to match the client.
 
 ## Reuse framework types
 

@@ -1,9 +1,7 @@
 # Building this book
 
-The book uses [Zensical](https://zensical.org/) with the same pinned version and
-GitHub Pages deployment pattern as [roto](https://vivainio.github.io/roto/).
-The documentation source lives in `docs/`; navigation and theme live in
-`zensical.toml`.
+The book uses [Zensical](https://zensical.org/). Source lives in `docs/`;
+navigation and theme live in `zensical.toml`.
 
 ## Local preview
 

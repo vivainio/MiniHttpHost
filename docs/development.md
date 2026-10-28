@@ -26,14 +26,13 @@ check verifies both protocols can share a process on separate ports and shut dow
 independently.
 
 Mono 6.14.1 on macOS supports local development, but is not an HTTP.sys substitute.
-An unrestricted chunked request upload previously stalled after the body arrived;
-use fixed-length uploads for local Mono development and verify chunked requests
-on Windows. Incremental chunked responses and early rejection of oversized chunked
-requests pass locally.
+Unrestricted chunked request uploads can stall after the body arrives on this
+runtime. Use fixed-length uploads for local Mono development and verify chunked
+requests on Windows. Incremental chunked responses and early rejection of
+oversized chunked requests pass locally.
 
-The current context-based handler API replaces the initial raw-context/two-argument
-API: handlers now receive `HttpContext`, and use `context.RequestAborted` for the
-token. Existing application services can stay instance-based.
+Handlers receive `HttpContext` and use `context.RequestAborted` for cancellation.
+Application services can stay instance-based.
 
 Modern development and checks can run without Mono:
 

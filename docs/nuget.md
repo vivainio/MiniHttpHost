@@ -41,5 +41,4 @@ has `id-token: write` and runs in the matching `nuget` environment.
   publish that version through the trusted-publishing job. This is the publication
   trigger, so create the release only when you intend to publish the package.
 
-The package is prepared by this repository; configuring a policy does not itself
-publish anything. See [Microsoft's trusted-publishing guide](https://learn.microsoft.com/en-us/nuget/nuget-org/trusted-publishing).
+See [Microsoft's trusted-publishing guide](https://learn.microsoft.com/en-us/nuget/nuget-org/trusted-publishing).

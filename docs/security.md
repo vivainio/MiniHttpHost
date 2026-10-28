@@ -1,28 +1,13 @@
 # Security analysis
 
 MiniHttpHost is intended for private-network deployments alongside existing
-applications, including the internal service environments where self-hosted WCF
-is already used. It has not been specifically hardened or validated for direct
-exposure to the public internet. Sharing HTTP.sys with established Windows servers
-does not establish that level of readiness for this library or its handlers.
+applications. It has not been hardened or validated for direct public-internet
+exposure. Private networks still require authentication, authorization, and
+request limits; public-facing deployments need a separate security review.
 
-Private-network deployment still requires authentication, authorization and
-request limits: network location alone does not make a caller trustworthy.
-Public-facing use needs a separate security review and deployment controls,
-including appropriate ingress filtering, rate limits and monitoring. A reverse
-proxy can provide some of those controls, but does not secure application logic.
-
-On Windows, HTTP.sys provides an operating-system HTTP transport rather than a
-custom socket server and HTTP parser in MiniHttpHost. Relying on that maintained
-platform component is a useful security boundary: MiniHttpHost delegates incoming
-HTTP framing, connection handling, and HTTPS transport to the Windows stack.
-It does not make application handlers safe or isolate them from the embedding
-process. Treat “hardened transport” as an architectural advantage, not a security
-certification of the whole endpoint.
-
-This chapter reviews the implementation and deployment responsibilities; it is
-not a penetration-test report. The HTTP.sys conclusions apply to Windows.
-Mono and modern .NET on other operating systems use different implementations.
+On Windows, HTTP.sys handles HTTP framing, connections, and HTTPS transport.
+Application handlers run with the embedding process's permissions. Mono and
+modern .NET on other operating systems use different listener implementations.
 
 ## Where the boundaries lie
 
@@ -34,12 +19,9 @@ Mono and modern .NET on other operating systems use different implementations.
 | Host application | Authentication configuration, authorization, input validation, safe file/storage access, browser policies, logging and resource budgets |
 | Deployment | OS/runtime updates, certificate lifecycle, URL reservations, firewall rules, service-account privileges and any reverse proxy |
 
-Microsoft documents HTTP.sys as the Windows foundation of
-[HttpListener](https://learn.microsoft.com/en-us/dotnet/api/system.net.httplistener?view=netframework-4.7.2).
-Sharing that foundation with IIS does not install IIS modules or its application
-request-filtering policies in MiniHttpHost. The source of this library contains
-no HTTP wire-format parser; application-level JSON, XML and multipart parsers
-still have their own attack surfaces.
+See Microsoft's [HttpListener documentation](https://learn.microsoft.com/en-us/dotnet/api/system.net.httplistener?view=netframework-4.7.2)
+for the Windows transport. IIS modules and request-filtering policies do not apply
+to this standalone listener.
 
 ## Configure the listener before accepting requests
 
