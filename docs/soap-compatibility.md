@@ -1,5 +1,8 @@
 # A SOAP compatibility POST endpoint
 
+A runnable [SOAP 1.1 pattern](https://github.com/vivainio/MiniHttpHost/tree/main/patterns/HttpPatterns)
+shows explicit action/body dispatch, a typed greeting reply, and SOAP faults.
+
 This is an application integration idea, not a SOAP implementation in MiniHttpHost.
 An existing client already generates SOAP; it could change its destination to one
 ordinary POST endpoint while keeping that serializer and message types.

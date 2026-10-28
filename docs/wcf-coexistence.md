@@ -1,5 +1,10 @@
 # Sharing a process with WCF
 
+The intended setup runs MiniHttpHost alongside an existing WCF service in the
+same process, with MiniHttpHost listening on a separate port. The concerns are
+shared process resources, independent listener lifetimes, authentication, and
+streaming behavior.
+
 This review covers Microsoft's .NET Framework reference implementation of
 self-hosted WCF HTTP transport and the CLR scheduler it uses. These details are
 implementation evidence, not an invitation to depend on private WCF APIs.
@@ -23,23 +28,11 @@ Consequences for MiniHttpHost:
   operation's principal or logical call context. An integration check sets an
   `AsyncLocal` during startup and verifies it isn't inherited by HTTP handlers.
 
-## URL prefix precedence matters more than process identity
+## Separate ports and independent lifetimes
 
-HTTP.sys routes to registered URL namespaces, even when the listeners share a
-process. Microsoft's [routing rules](https://learn.microsoft.com/en-us/windows/win32/http/routing-incoming-requests)
-search strong wildcards (`+`) before explicit hosts; longest-path matching happens
-within a host category, not across all registrations.
-
-For example, a running `http://+:8080/` registration can take precedence over an
-explicit-host `http://localhost:8080/new/` listener despite the latter's longer
-path. Inspect the actual WCF registrations rather than assuming separate route
-names are sufficient. Reservations participate in routing too.
-
-A separate port is the intended integration approach here. The Windows check
-hosts WCF and MiniHttpHost in one process on different ports, then verifies WCF
-still responds after MiniHttpHost shuts down. Same-port hosting would require
-additional coordination of host-matching modes and prefixes; it is not required
-by this project or the coexistence test.
+Configure MiniHttpHost with its own port and URL prefix. The Windows integration
+check hosts WCF and MiniHttpHost in one process on different ports, verifies both
+respond, then verifies WCF still responds after MiniHttpHost shuts down.
 
 URL ACLs and HTTP.sys TLS certificate bindings are system configuration, not
 properties owned by one framework instance. Coordinate them with the existing

@@ -145,8 +145,10 @@ namespace MiniHttpHost
 
     public sealed class HttpRouteOptions
     {
-        public long? MaxRequestBodyBytes { get; set; }
-        public TimeSpan? Timeout { get; set; }
+        /// <summary>Defaults to 30 MiB. Set null explicitly for no body limit.</summary>
+        public long? MaxRequestBodyBytes { get; set; } = 30L * 1024 * 1024;
+        /// <summary>Defaults to two minutes. Set null explicitly for no route deadline.</summary>
+        public TimeSpan? Timeout { get; set; } = TimeSpan.FromMinutes(2);
         public bool EnableCompression { get; set; }
         public IResponseCompressionProvider CompressionProvider { get; set; } = GzipCompressionProvider.Default;
 

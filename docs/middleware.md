@@ -60,7 +60,9 @@ finally { server.Dispose(); }
 `MaxRequestBodyBytes` rejects an oversized declared length before invoking the
 route. For unknown lengths, the request wrapper counts bytes as they are read.
 Limits are enforced through `RequestBody`; there is no automatic whole-body
-buffering. Defaults impose no body-size or route-duration limit.
+buffering. Routes default to a 30 MiB body limit and a two-minute deadline, including when
+no options are supplied. Override either value for larger or longer transfers.
+Set the corresponding property to `null` explicitly to disable that limit.
 
 `Timeout` starts after route selection and includes its group middleware. Expiry
 signals cancellation and aborts the connection; it does not guarantee a 408

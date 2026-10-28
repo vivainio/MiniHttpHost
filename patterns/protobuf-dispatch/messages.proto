@@ -1,0 +1,14 @@
+syntax = "proto3";
+package minihttp.patterns;
+
+// Documentation/interoperability schema. C# uses matching ProtoMember numbers;
+// this file is not a code-generation input to the sample build.
+message Envelope {
+  string message_type = 1;
+  string correlation_id = 2;
+  bytes payload = 3;
+}
+message GetCustomer { int32 id = 1; }
+message UpdateCustomer { int32 id = 1; string name = 2; }
+message Customer { int32 id = 1; string name = 2; }
+message Error { string code = 1; string message = 2; }

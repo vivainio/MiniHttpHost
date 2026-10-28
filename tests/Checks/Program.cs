@@ -45,6 +45,7 @@ internal static partial class Program
             File.WriteAllBytes(file, binary);
             await CheckHttpAsync(file, binary);
             await CheckForcedShutdownAsync();
+            await CheckSecurityConfigurationAsync();
             await CheckCompressionAsync();
 #if NETFRAMEWORK
             if (Type.GetType("Mono.Runtime") == null) await CheckWcfCoexistenceAsync();
@@ -52,6 +53,51 @@ internal static partial class Program
             Console.WriteLine("PASS: {0} assertions", assertions);
         }
         finally { File.Delete(file); }
+    }
+
+    private static async Task CheckSecurityConfigurationAsync()
+    {
+        var prefix = Prefix();
+        bool configured = false;
+        bool invoked = false;
+        var routes = new HttpRouter().MapPost("/upload", c =>
+        {
+            invoked = true;
+            return c.TextAsync("unexpected");
+        });
+        using (var server = new MiniWebServer(prefix, routes.HandleAsync,
+            configureListener: listener =>
+            {
+                Check(!listener.IsListening, "Listener configured before startup");
+                listener.AuthenticationSchemes = AuthenticationSchemes.Anonymous;
+                configured = true;
+            }))
+        {
+            await server.StartAsync();
+            Check(configured, "Listener configuration applied");
+            // A large declared length must be rejected without buffering the body
+            // or invoking the handler. This also exercises options omitted at Map.
+            using (var socket = new TcpClient())
+            {
+                var uri = new Uri(prefix);
+                await socket.ConnectAsync(uri.Host, uri.Port);
+                var stream = socket.GetStream();
+                byte[] headers = Encoding.ASCII.GetBytes(
+                    "POST /upload HTTP/1.1\r\nHost: " + uri.Authority +
+                    "\r\nContent-Length: 31457281\r\nConnection: close\r\n\r\n");
+                await stream.WriteAsync(headers, 0, headers.Length);
+                using (var reader = new StreamReader(stream, Encoding.ASCII))
+                {
+                    var statusTask = reader.ReadLineAsync();
+                    Check(await Task.WhenAny(statusTask, Task.Delay(5000)) == statusTask,
+                        "Default body limit rejects without waiting for body");
+                    string status = await statusTask;
+                    Check(status != null && status.Contains(" 413 ") && !invoked,
+                        "Default body limit rejects declared oversized request before handler");
+                }
+            }
+            await server.StopAsync();
+        }
     }
 
     private static async Task CheckHttpAsync(string file, byte[] binary)

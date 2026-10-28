@@ -16,6 +16,7 @@ namespace MiniHttpHost
         private readonly string prefix;
         private readonly HttpHandler handler;
         private readonly int concurrency;
+        private readonly Action<HttpListener> configureListener;
         private readonly HashSet<HttpContext> active = new HashSet<HttpContext>();
         private readonly CancellationTokenSource abortRequests = new CancellationTokenSource();
         private HttpListener listener;
@@ -24,7 +25,8 @@ namespace MiniHttpHost
         private bool stopping;
         private Task completion = Task.CompletedTask;
 
-        public MiniWebServer(string prefix, HttpHandler handler, int concurrency = 16)
+        public MiniWebServer(string prefix, HttpHandler handler, int concurrency = 16,
+            Action<HttpListener> configureListener = null)
         {
             if (string.IsNullOrWhiteSpace(prefix)) throw new ArgumentException("A URL prefix is required.", nameof(prefix));
             if (handler == null) throw new ArgumentNullException(nameof(handler));
@@ -32,6 +34,7 @@ namespace MiniHttpHost
             this.prefix = prefix;
             this.handler = handler;
             this.concurrency = concurrency;
+            this.configureListener = configureListener;
         }
 
         /// <summary>Observe this task for listener failures after StartAsync completes.</summary>
@@ -49,6 +52,7 @@ namespace MiniHttpHost
                 listener = new HttpListener();
                 try
                 {
+                    configureListener?.Invoke(listener);
                     listener.Prefixes.Add(prefix);
                     listener.Start();
                 }

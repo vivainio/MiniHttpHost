@@ -4,6 +4,10 @@ A small, embeddable HTTP server targeting .NET Framework 4.7.2 and .NET 10. Add 
 endpoints to an existing application, including a monolith moving away from WCF.
 No runtime NuGet dependencies, controller discovery, or DI container required.
 
+Intended for private networks where the existing application and WCF services
+already run. MiniHttpHost has not been specifically hardened or validated for
+direct public-internet exposure. See the [security analysis](docs/security.md).
+
 **On Windows, MiniHttpHost uses HTTP.sys, the kernel-mode HTTP server stack also
 used by IIS to host ASP.NET applications.** `HttpListener` exposes that Windows
 infrastructure directly, so the library lives inside your existing process
@@ -15,8 +19,8 @@ pool; there are no dedicated accept threads or custom worker pools.
 creates it directly. MiniHttpHost simplifies the layers above the listener by
 using ordinary HTTP handlers and streams in place of WCF's SOAP processing and
 dispatch. Sharing HTTP.sys alone doesn't establish a performance advantage over WCF.
-See the [WCF coexistence review](docs/wcf-coexistence.md) for listener settings,
-URL wildcard precedence, internal scheduling, and shared-process implications.
+See the [WCF coexistence review](docs/wcf-coexistence.md) for running both in one process on separate ports,
+with independent listeners and shared CLR capacity.
 
 See Microsoft's [HttpListener documentation](https://learn.microsoft.com/en-us/dotnet/api/system.net.httplistener?view=netframework-4.7.2)
 and [IIS architecture](https://learn.microsoft.com/en-us/iis/get-started/introduction-to-iis/introduction-to-iis-architecture).
@@ -39,6 +43,7 @@ or browse the chapters on GitHub:
 - [Routing and groups](docs/routing.md)
 - [Middleware, exception handling, and limits](docs/middleware.md)
 - [Lifetime and concurrency](docs/lifetime.md)
+- [Security analysis](docs/security.md)
 - [WCF coexistence](docs/wcf-coexistence.md)
 - [Framework and performance comparison](docs/framework-comparison.md)
 - [Examples and checks](docs/development.md)
@@ -55,6 +60,9 @@ the [embedding example](docs/getting-started.md) shows startup, shutdown, and er
 handling.
 
 ## Try the example
+
+See also [application patterns](patterns/README.md) for SOAP compatibility,
+streaming response records, and a protobuf message-dispatch server and client.
 
 ```sh
 dotnet build examples/ConsoleHost/ConsoleHost.csproj -c Release
