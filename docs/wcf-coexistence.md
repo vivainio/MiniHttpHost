@@ -75,9 +75,10 @@ uses a native body-read flag with value 1 outside opaque/WebSocket mode. For
 A read can wait for the requested chunk to fill or for the request to end; it
 need not return as soon as a smaller amount arrives.
 
-MiniHttpHost's requested 80 KiB copy buffer therefore trades some first-chunk latency
-for fewer I/O calls. `StreamAsync(..., bufferSize: 4096)` and `FileAsync`'s buffer
-argument allow application tuning without private reflection. This remains
+MiniHttpHost's default 4 KiB copy buffer keeps first-chunk latency low, which
+measured faster than 80 KiB for downloads and small uploads. Large uploads can pass
+`bufferSize: 81920` to `StreamAsync` for fewer I/O calls, and `FileAsync`'s buffer
+argument allows the same tuning without private reflection. This remains
 bounded streaming, not whole-message buffering. The incremental test sends more
 than one copy buffer, then requires response body bytes before sending the rest
 of the upload.

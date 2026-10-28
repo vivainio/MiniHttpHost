@@ -37,7 +37,7 @@ namespace MiniHttpHost
         /// </summary>
         public static async Task StreamAsync(this HttpContext context, Stream source,
             string contentType = "application/octet-stream", long? contentLength = null,
-            bool leaveOpen = true, int statusCode = 200, int bufferSize = 81920)
+            bool leaveOpen = true, int statusCode = 200, int bufferSize = 4096)
         {
             if (source == null) throw new ArgumentNullException(nameof(source));
             if (bufferSize <= 0) throw new ArgumentOutOfRangeException(nameof(bufferSize));
@@ -53,7 +53,7 @@ namespace MiniHttpHost
         }
 
         public static async Task FileAsync(this HttpContext context, string path,
-            string contentType = "application/octet-stream", int bufferSize = 81920)
+            string contentType = "application/octet-stream", int bufferSize = 4096)
         {
             if (bufferSize <= 0) throw new ArgumentOutOfRangeException(nameof(bufferSize));
             using (var input = new FileStream(path, FileMode.Open, FileAccess.Read,

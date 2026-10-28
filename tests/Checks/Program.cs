@@ -278,9 +278,9 @@ internal static partial class Program
             {
                 byte[] header = Encoding.ASCII.GetBytes("POST /echo HTTP/1.1\r\nHost: " + uri.Authority +
                     "\r\nContent-Length: 393216\r\nConnection: close\r\n\r\n");
-                // Windows HttpListener fills the requested read buffer. Modern
-                // CopyToAsync may round an 80 KiB request up to a 128 KiB pooled
-                // array. Send more than either buffer, but less than the body.
+                // Windows HttpListener fills the requested read buffer. The default
+                // StreamAsync copy buffer is 4 KiB. Send more than that, but less
+                // than the body.
                 byte[] block = new byte[196608];
                 await stream.WriteAsync(header, 0, header.Length);
                 await stream.WriteAsync(block, 0, block.Length);
@@ -300,8 +300,11 @@ internal static partial class Program
                 }
                 Check(Encoding.ASCII.GetString(received.ToArray()).StartsWith("HTTP/1.1 200", StringComparison.Ordinal),
                     "Response body begins before upload completes");
+                // Read the rest of the response while the second half uploads, as a real client
+                // does. Without this, unread echo data builds up and HttpListener aborts the request.
+                var drain = stream.CopyToAsync(Stream.Null);
                 await stream.WriteAsync(block, 0, block.Length);
-                await WithDeadline(stream.CopyToAsync(Stream.Null));
+                await WithDeadline(drain);
             }
         }
     }

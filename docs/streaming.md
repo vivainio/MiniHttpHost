@@ -24,7 +24,7 @@ The response helpers are extension methods on the context:
 | --- | --- |
 | `TextAsync(text, statusCode: 200)` | UTF-8 plain text |
 | `JsonAsync(value, statusCode: 200)` | Framework `DataContractJsonSerializer`; buffers small JSON responses |
-| `StreamAsync(source, contentType, contentLength, leaveOpen: true)` | Incremental copy; defaults to an 80 KiB buffer and caller-owned stream |
+| `StreamAsync(source, contentType, contentLength, leaveOpen: true)` | Incremental copy; defaults to a 4 KiB buffer and caller-owned stream |
 | `FileAsync(path, contentType)` | Opens an asynchronous file stream, sends it, and disposes it |
 
 `StreamAsync` infers remaining length from seekable streams. Otherwise, provide a
@@ -33,7 +33,8 @@ helpers do not buffer the whole payload. JSON follows the framework serializer's
 contracts: use public DTOs or `[DataContract]` / `[DataMember]` types. It is not an
 automatic model-binding or arbitrary anonymous-object serialization API.
 
-Use `StreamAsync(source, bufferSize: 4096)` for smaller copy chunks; `FileAsync`
+The 4 KiB default measured fastest for downloads and small uploads. For large
+uploads, `StreamAsync(source, bufferSize: 81920)` measured faster; `FileAsync`
 also accepts `bufferSize`. Framework HttpListener can wait to fill a requested
 body-read buffer, so this affects first-chunk latency as well as throughput.
 Flushing the response does not unblock a pending request read.
