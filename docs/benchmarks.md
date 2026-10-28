@@ -39,20 +39,29 @@ self-hosting is Framework-only in this repository.
 
 Median of three rounds, from `Benchmarks.exe --rounds 3 --seconds 5`.
 
-| Server | Operation | Size | p50 ms | p95 ms | req/s | MB/s |
-| --- | --- | ---: | ---: | ---: | ---: | ---: |
-| MiniHttpHost | Echo | 1 KiB | 0.27 | 0.42 | 13,272 | 25.9 |
-| WCF | Echo | 1 KiB | 0.34 | 0.45 | 10,472 | 20.5 |
-| MiniHttpHost | Echo | 1 MiB | 19.19 | 167.16 | 1,221 | 2,441 |
-| WCF | Echo | 1 MiB | 65.11 | 198.99 | 762 | 1,524 |
-| MiniHttpHost | Echo | 16 MiB | 69.43 | 120.70 | 79.2 | 2,534 |
-| WCF | Echo | 16 MiB | 95.52 | 372.38 | 57.7 | 1,847 |
-| MiniHttpHost | Download | 1 KiB | 0.19 | 0.31 | 26,305 | 25.7 |
-| WCF | Download | 1 KiB | 0.31 | 0.45 | 11,254 | 11.0 |
-| MiniHttpHost | Download | 1 MiB | 3.18 | 4.29 | 2,389 | 2,389 |
-| WCF | Download | 1 MiB | 5.56 | 25.58 | 790 | 790 |
-| MiniHttpHost | Download | 16 MiB | 55.10 | 60.42 | 139.9 | 2,239 |
-| WCF | Download | 16 MiB | 76.67 | 114.86 | 63.8 | 1,021 |
+### Echo
+
+Each body is posted and read back. Ratio is MiniHttpHost requests per second divided by WCF's.
+
+| Body | MiniHttpHost req/s | WCF req/s | Ratio | MiniHttpHost p50 | WCF p50 |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 KiB | 13,272 | 10,472 | 1.3× | 0.27 ms | 0.34 ms |
+| 1 MiB | 1,221 | 762 | 1.6× | 19.2 ms | 65.1 ms |
+| 16 MiB | 79.2 | 57.7 | 1.4× | 69.4 ms | 95.5 ms |
+
+### Download
+
+Each response is a payload of the given size.
+
+| Body | MiniHttpHost req/s | WCF req/s | Ratio | MiniHttpHost p50 | WCF p50 |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 KiB | 26,305 | 11,254 | 2.3× | 0.19 ms | 0.31 ms |
+| 1 MiB | 2,389 | 790 | 3.0× | 3.18 ms | 5.56 ms |
+| 16 MiB | 139.9 | 63.8 | 2.2× | 55.1 ms | 76.7 ms |
+
+p95 latency and MB/s are left out to keep the tables readable. MB/s is req/s times the
+body size. p95 varies most between rounds, so the p95 discussion under Limitations
+applies.
 
 ## Reading the results
 
