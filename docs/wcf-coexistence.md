@@ -75,12 +75,14 @@ uses a native body-read flag with value 1 outside opaque/WebSocket mode. For
 A read can wait for the requested chunk to fill or for the request to end; it
 need not return as soon as a smaller amount arrives.
 
-MiniHttpHost's default 80 KiB copy buffer therefore trades some first-chunk latency
+MiniHttpHost's requested 80 KiB copy buffer therefore trades some first-chunk latency
 for fewer I/O calls. `StreamAsync(..., bufferSize: 4096)` and `FileAsync`'s buffer
 argument allow application tuning without private reflection. This remains
 bounded streaming, not whole-message buffering. The incremental test sends more
 than one copy buffer, then requires response body bytes before sending the rest
 of the upload.
+Modern .NET may round pooled copy buffers up, so actual read sizes can exceed
+the requested buffer size.
 
 The framework's [response stream](https://github.com/microsoft/referencesource/blob/main/System/net/System/Net/_ListenerResponseStream.cs)
 implements `Flush`/`FlushAsync` as no-ops. Flushing an application-side buffered

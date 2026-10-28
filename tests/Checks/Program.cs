@@ -277,10 +277,11 @@ internal static partial class Program
             using (var stream = socket.GetStream())
             {
                 byte[] header = Encoding.ASCII.GetBytes("POST /echo HTTP/1.1\r\nHost: " + uri.Authority +
-                    "\r\nContent-Length: 196608\r\nConnection: close\r\n\r\n");
-                // Framework HttpListener fills the requested read buffer. Send
-                // more than the helper's 80 KiB buffer, but less than the body.
-                byte[] block = new byte[98304];
+                    "\r\nContent-Length: 393216\r\nConnection: close\r\n\r\n");
+                // Windows HttpListener fills the requested read buffer. Modern
+                // CopyToAsync may round an 80 KiB request up to a 128 KiB pooled
+                // array. Send more than either buffer, but less than the body.
+                byte[] block = new byte[196608];
                 await stream.WriteAsync(header, 0, header.Length);
                 await stream.WriteAsync(block, 0, block.Length);
                 // A server that buffers the entire request deadlocks here: we
