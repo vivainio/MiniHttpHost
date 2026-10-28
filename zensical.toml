@@ -24,6 +24,7 @@ nav = [
     { "WCF coexistence" = "wcf-coexistence.md" },
     { "SOAP compatibility endpoint" = "soap-compatibility.md" },
     { "Framework and performance comparison" = "framework-comparison.md" },
+    { "Benchmarks: MiniHttpHost and WCF" = "benchmarks.md" },
   ] },
   { "Development" = [
     { "Examples and checks" = "development.md" },

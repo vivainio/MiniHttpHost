@@ -83,8 +83,10 @@ latency, server CPU, allocations/GC, and working set. Match WCF throttling again
 MiniHttpHost's handler concurrency. Include a mixed workload because both endpoints
 will run in the same application and can contend for shared resources.
 
-No WCF-vs-MiniHttpHost benchmark has been run in this repository. The integration
-checks verify behavior; their runtime is not a throughput benchmark.
+A first WCF-vs-MiniHttpHost benchmark is in [Benchmarks: MiniHttpHost and WCF](benchmarks.md).
+It runs on one Windows machine with the client and both servers in one process, so its
+results show loopback behavior rather than server capacity. The integration checks verify
+behavior; their runtime is not a throughput benchmark.
 
 ## Tuning scope
 
