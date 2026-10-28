@@ -13,8 +13,10 @@ using System.Threading.Tasks;
 using MiniHttpHost;
 
 // Compares MiniHttpHost (HttpListener + HttpRouter) with a self-hosted WCF
-// WebHttpBinding service on the same HTTP.sys stack. Both servers stream raw
-// bodies. Run on Windows with: dotnet run -f net472 -- [--rounds 3] [--seconds 5] [--concurrency 32]
+// WebHttpBinding service on the same HTTP.sys stack. All servers stream raw
+// bodies. ASP.NET Core runs out of process (tests/BenchmarkServer, net10.0), so
+// start it first and pass --aspnet to include it. Run on Windows with:
+// dotnet run -f net472 -- [--rounds 3] [--seconds 5] [--concurrency 32] [--aspnet]
 [ServiceContract]
 public interface IBench
 {
@@ -43,6 +45,7 @@ internal static class Program
 {
     private const string MiniBase = "http://localhost:8081/";
     private const string WcfBase = "http://localhost:8082/";
+    private const string AspNetBase = "http://localhost:8083/";
     private const int CopyBuffer = 81920;
     private const int MaxConcurrentCalls = 64;
 
@@ -96,21 +99,28 @@ internal static class Program
         Console.WriteLine("Environment: {0}, {1} processors, CLR {2}", Environment.OSVersion, Environment.ProcessorCount, Environment.Version);
         Console.WriteLine("rounds={0} seconds={1} concurrency={2}", rounds, seconds, concurrency);
 
+        // ASP.NET Core is opt-in because its server must already be running on port 8083.
+        var servers = new List<KeyValuePair<string, string>>
+        {
+            new KeyValuePair<string, string>("MiniHttpHost", MiniBase),
+            new KeyValuePair<string, string>("WCF", WcfBase)
+        };
+        if (Array.IndexOf(args, "--aspnet") >= 0)
+            servers.Add(new KeyValuePair<string, string>("ASP.NET Core", AspNetBase));
+
         using (var mini = StartMiniHttpHost())
         using (var wcf = StartWcf())
         using (var handler = new HttpClientHandler { MaxConnectionsPerServer = 256 })
         using (var client = new HttpClient(handler))
         {
-            await VerifyAsync(client, MiniBase, "MiniHttpHost");
-            await VerifyAsync(client, WcfBase, "WCF");
+            foreach (var server in servers) await VerifyAsync(client, server.Value, server.Key);
 
             var results = new List<Cell>();
             for (int round = 0; round < rounds; round++)
             {
-                // Alternate order each round so neither server always runs first on a warm machine.
-                var order = round % 2 == 0
-                    ? new[] { new KeyValuePair<string, string>("MiniHttpHost", MiniBase), new KeyValuePair<string, string>("WCF", WcfBase) }
-                    : new[] { new KeyValuePair<string, string>("WCF", WcfBase), new KeyValuePair<string, string>("MiniHttpHost", MiniBase) };
+                // Rotate the start server each round so no server always runs first on a warm machine.
+                int offset = round % servers.Count;
+                var order = servers.Skip(offset).Concat(servers.Take(offset));
                 foreach (var server in order)
                 {
                     foreach (Op op in new[] { Op.Echo, Op.Download })
