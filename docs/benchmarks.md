@@ -67,7 +67,7 @@ applies.
 ## Reading the results
 
 - MiniHttpHost has the higher median throughput at every size on this machine. The gap is
-  widest for downloads at 1 MiB, where it is about 200% higher.
+  widest for downloads at 1 MiB, where it is about 3x.
 - The 1 KiB echo gap was investigated earlier. An 80 KiB copy buffer halved throughput at that
   size, which is why small echoes use 4 KiB.
 - p95 values are noisy. At 1 MiB echo, one WCF round was far above the others, so the
