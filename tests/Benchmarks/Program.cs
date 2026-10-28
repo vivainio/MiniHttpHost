@@ -49,8 +49,20 @@ internal static class Program
     // Shared so every download is a slice of the same buffer; the largest size is the only allocation.
     internal static readonly byte[] Payload = MakePayload(16 * 1024 * 1024);
 
-    private static readonly int[] Sizes = { 1024, 1024 * 1024, 16 * 1024 * 1024 };
-    private static readonly int[] LatencyIterations = { 500, 100, 10 };
+    private static int[] Sizes = { 1024, 1024 * 1024, 16 * 1024 * 1024 };
+    private static int[] LatencyIterations = { 500, 100, 10 };
+    // Measured crossover (see commit message): echo prefers 4 KiB up to 16 KiB bodies and
+    // 80 KiB from 32 KiB up; download prefers 4 KiB at every size tested.
+    private const int SmallCopyBuffer = 4096;
+    private const int LargeCopyBuffer = 81920;
+    private const long SmallEchoLimit = 16 * 1024;
+
+    // Unknown length (chunked, ContentLength64 = -1) takes the large buffer.
+    private static int BufferForEcho(long length) =>
+        length >= 0 && length <= SmallEchoLimit ? SmallCopyBuffer : LargeCopyBuffer;
+    // Pooled client read buffers, so client allocations don't affect either server's numbers.
+    private static readonly System.Collections.Concurrent.ConcurrentBag<byte[]> ReadBuffers =
+        new System.Collections.Concurrent.ConcurrentBag<byte[]>();
 
     private enum Op { Echo, Download }
 
@@ -70,6 +82,12 @@ internal static class Program
         int rounds = IntArg(args, "--rounds", 3);
         double seconds = IntArg(args, "--seconds", 5);
         int concurrency = IntArg(args, "--concurrency", 32);
+        string sizeList = StringArg(args, "--sizes");
+        if (sizeList != null)
+        {
+            Sizes = sizeList.Split(',').Select(int.Parse).ToArray();
+            LatencyIterations = Sizes.Select(s => s <= 4096 ? 500 : s <= 1048576 ? 100 : 10).ToArray();
+        }
 
         ServicePointManager.DefaultConnectionLimit = 256;
         ServicePointManager.Expect100Continue = false;
@@ -112,6 +130,12 @@ internal static class Program
         }
     }
 
+    private static string StringArg(string[] args, string name)
+    {
+        int index = Array.IndexOf(args, name);
+        return index >= 0 && index + 1 < args.Length ? args[index + 1] : null;
+    }
+
     private static int IntArg(string[] args, string name, int fallback)
     {
         int index = Array.IndexOf(args, name);
@@ -130,7 +154,7 @@ internal static class Program
     private static MiniWebServer StartMiniHttpHost()
     {
         var routes = new HttpRouter()
-            .MapPost("/echo", c => c.StreamAsync(c.RequestBody), new HttpRouteOptions
+            .MapPost("/echo", c => c.StreamAsync(c.RequestBody, bufferSize: BufferForEcho(c.Request.ContentLength64)), new HttpRouteOptions
             {
                 MaxRequestBodyBytes = 1L << 30,
                 Timeout = TimeSpan.FromMinutes(10)
@@ -138,7 +162,8 @@ internal static class Program
             .MapGet("/download/{size}", c =>
             {
                 int count = int.Parse(c.RouteValues["size"]);
-                return c.StreamAsync(new MemoryStream(Payload, 0, count, false), "application/octet-stream", count);
+                return c.StreamAsync(new MemoryStream(Payload, 0, count, false), "application/octet-stream", count,
+                    bufferSize: SmallCopyBuffer);
             });
         var handler = new HttpPipeline().UseExceptionHandler().Build(routes.HandleAsync);
         var server = new MiniWebServer(MiniBase, handler, concurrency: MaxConcurrentCalls);
@@ -257,10 +282,15 @@ internal static class Program
 
     private static async Task<long> CountAsync(Stream body)
     {
-        var buffer = new byte[CopyBuffer];
+        byte[] buffer;
+        if (!ReadBuffers.TryTake(out buffer)) buffer = new byte[CopyBuffer];
         long total = 0;
         int n;
-        while ((n = await body.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false)) > 0) total += n;
+        try
+        {
+            while ((n = await body.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false)) > 0) total += n;
+        }
+        finally { ReadBuffers.Add(buffer); }
         return total;
     }
 
