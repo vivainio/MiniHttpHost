@@ -41,23 +41,24 @@ Median of three rounds, from `Benchmarks.exe --rounds 3 --seconds 5`.
 
 ### Echo
 
-Each body is posted and read back. Ratio is MiniHttpHost requests per second divided by WCF's.
+Each body is posted and read back. Difference is how much higher MiniHttpHost's req/s is
+than WCF's, as a percentage of WCF's.
 
-| Body | MiniHttpHost req/s | WCF req/s | Ratio | MiniHttpHost p50 | WCF p50 |
+| Body | MiniHttpHost req/s | WCF req/s | Difference | MiniHttpHost p50 | WCF p50 |
 | ---: | ---: | ---: | ---: | ---: | ---: |
-| 1 KiB | 13,272 | 10,472 | 1.3× | 0.27 ms | 0.34 ms |
-| 1 MiB | 1,221 | 762 | 1.6× | 19.2 ms | 65.1 ms |
-| 16 MiB | 79.2 | 57.7 | 1.4× | 69.4 ms | 95.5 ms |
+| 1 KiB | 13,272 | 10,472 | +27% | 0.27 ms | 0.34 ms |
+| 1 MiB | 1,221 | 762 | +60% | 19.2 ms | 65.1 ms |
+| 16 MiB | 79.2 | 57.7 | +37% | 69.4 ms | 95.5 ms |
 
 ### Download
 
-Each response is a payload of the given size.
+Each response is a payload of the given size. Difference is defined as in the echo table.
 
-| Body | MiniHttpHost req/s | WCF req/s | Ratio | MiniHttpHost p50 | WCF p50 |
+| Body | MiniHttpHost req/s | WCF req/s | Difference | MiniHttpHost p50 | WCF p50 |
 | ---: | ---: | ---: | ---: | ---: | ---: |
-| 1 KiB | 26,305 | 11,254 | 2.3× | 0.19 ms | 0.31 ms |
-| 1 MiB | 2,389 | 790 | 3.0× | 3.18 ms | 5.56 ms |
-| 16 MiB | 139.9 | 63.8 | 2.2× | 55.1 ms | 76.7 ms |
+| 1 KiB | 26,305 | 11,254 | +134% | 0.19 ms | 0.31 ms |
+| 1 MiB | 2,389 | 790 | +202% | 3.18 ms | 5.56 ms |
+| 16 MiB | 139.9 | 63.8 | +119% | 55.1 ms | 76.7 ms |
 
 p95 latency and MB/s are left out to keep the tables readable. MB/s is req/s times the
 body size. p95 varies most between rounds, so the p95 discussion under Limitations
@@ -66,7 +67,7 @@ applies.
 ## Reading the results
 
 - MiniHttpHost has the higher median throughput at every size on this machine. The gap is
-  widest for downloads at 1 MiB, where it is about 3x.
+  widest for downloads at 1 MiB, where it is about 200% higher.
 - The 1 KiB echo gap was investigated earlier. An 80 KiB copy buffer halved throughput at that
   size, which is why small echoes use 4 KiB.
 - p95 values are noisy. At 1 MiB echo, one WCF round was far above the others, so the
