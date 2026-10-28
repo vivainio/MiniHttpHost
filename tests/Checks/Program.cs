@@ -44,6 +44,7 @@ internal static partial class Program
             byte[] binary = Enumerable.Range(0, 4 * 1024 * 1024).Select(i => (byte)i).ToArray();
             File.WriteAllBytes(file, binary);
             await CheckHttpAsync(file, binary);
+            await CheckRoutingAsync();
             await CheckForcedShutdownAsync();
             await CheckSecurityConfigurationAsync();
             await CheckCompressionAsync();

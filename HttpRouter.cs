@@ -11,6 +11,7 @@ namespace MiniHttpHost
     {
         private readonly object gate = new object();
         private readonly List<Route> routes = new List<Route>();
+        private Route[] routeSnapshot = new Route[0];
 
         public HttpRouter MapGet(string path, HttpHandler handler, HttpRouteOptions options = null)
             => Map("GET", path, handler, options);
@@ -29,6 +30,7 @@ namespace MiniHttpHost
                     throw new ArgumentException("This method and route pattern are already registered.");
                 routes.Add(route);
                 routes.Sort(Route.Compare);
+                Volatile.Write(ref routeSnapshot, routes.ToArray());
             }
             return this;
         }
@@ -39,19 +41,20 @@ namespace MiniHttpHost
         {
             if (context == null) throw new ArgumentNullException(nameof(context));
             context.RequestAborted.ThrowIfCancellationRequested();
-            Route[] snapshot;
-            lock (gate) snapshot = routes.ToArray();
-            var allowed = new SortedSet<string>(StringComparer.Ordinal);
-            var segments = context.Request.Url.AbsolutePath.Split('/');
+            var snapshot = Volatile.Read(ref routeSnapshot);
+            SortedSet<string> allowed = null;
+            string path = context.Request.Url.AbsolutePath;
             foreach (var route in snapshot)
             {
-                if (!route.Matches(segments)) continue;
-                allowed.Add(route.Method);
-                if (route.Method != context.Request.HttpMethod) continue;
+                if (!route.Matches(path)) continue;
+                if (route.Method != context.Request.HttpMethod)
+                {
+                    if (allowed == null) allowed = new SortedSet<string>(StringComparer.Ordinal);
+                    allowed.Add(route.Method);
+                    continue;
+                }
                 context.RouteValues.Clear();
-                for (int i = 0; i < segments.Length; i++)
-                    if (route.Names[i] != null)
-                        context.RouteValues.Add(route.Names[i], Uri.UnescapeDataString(segments[i]));
+                route.CaptureValues(path, context.RouteValues);
                 context.LimitBody(route.Options.MaxRequestBodyBytes);
                 if (!route.Options.Timeout.HasValue)
                 {
@@ -71,8 +74,8 @@ namespace MiniHttpHost
                 }
                 return;
             }
-            context.Response.StatusCode = allowed.Count == 0 ? 404 : 405;
-            if (allowed.Count != 0) context.Response.Headers["Allow"] = string.Join(", ", allowed);
+            context.Response.StatusCode = allowed == null ? 404 : 405;
+            if (allowed != null) context.Response.Headers["Allow"] = string.Join(", ", allowed);
             context.Response.ContentLength64 = 0;
         }
 
@@ -121,12 +124,39 @@ namespace MiniHttpHost
                 Signature = string.Join("/", Segments.Select((s, i) => Names[i] == null ? s : "{}"));
             }
 
-            internal bool Matches(string[] path)
+            // Compare slices in place: works on net472 without allocating split strings.
+            internal bool Matches(string path)
             {
-                if (path.Length != Segments.Length) return false;
-                for (int i = 0; i < path.Length; i++)
-                    if (Names[i] == null ? path[i] != Segments[i] : path[i].Length == 0) return false;
+                int start = 0;
+                for (int i = 0; i < Segments.Length; i++)
+                {
+                    int end = path.IndexOf('/', start);
+                    bool last = end < 0;
+                    if (last != (i == Segments.Length - 1)) return false;
+                    if (last) end = path.Length;
+                    int length = end - start;
+                    if (Names[i] == null)
+                    {
+                        if (length != Segments[i].Length ||
+                            string.CompareOrdinal(path, start, Segments[i], 0, length) != 0) return false;
+                    }
+                    else if (length == 0) return false;
+                    start = end + 1;
+                }
                 return true;
+            }
+
+            internal void CaptureValues(string path, IDictionary<string, string> values)
+            {
+                int start = 0;
+                for (int i = 0; i < Segments.Length; i++)
+                {
+                    int end = path.IndexOf('/', start);
+                    if (end < 0) end = path.Length;
+                    if (Names[i] != null)
+                        values.Add(Names[i], Uri.UnescapeDataString(path.Substring(start, end - start)));
+                    start = end + 1;
+                }
             }
 
             internal static int Compare(Route a, Route b)
