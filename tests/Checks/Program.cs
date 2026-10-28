@@ -7,13 +7,15 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Sockets;
 using System.Runtime.Serialization;
+#if NETFRAMEWORK
 using System.ServiceModel;
+#endif
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using MiniHttpHost;
 
-internal static class Program
+internal static partial class Program
 {
     private static int assertions;
     private static int portOffset;
@@ -43,7 +45,10 @@ internal static class Program
             File.WriteAllBytes(file, binary);
             await CheckHttpAsync(file, binary);
             await CheckForcedShutdownAsync();
+            await CheckCompressionAsync();
+#if NETFRAMEWORK
             if (Type.GetType("Mono.Runtime") == null) await CheckWcfCoexistenceAsync();
+#endif
             Console.WriteLine("PASS: {0} assertions", assertions);
         }
         finally { File.Delete(file); }
@@ -306,6 +311,7 @@ internal static class Program
         await task;
     }
 
+#if NETFRAMEWORK
     private static async Task CheckWcfCoexistenceAsync()
     {
         var legacyPrefix = Prefix();
@@ -338,6 +344,8 @@ internal static class Program
         }
     }
 
+#endif
+
     [DataContract]
     private sealed class Message
     {
@@ -351,6 +359,7 @@ internal static class Program
     }
 }
 
+#if NETFRAMEWORK
 [ServiceContract]
 public interface ILegacyProbe
 {
@@ -363,3 +372,4 @@ public sealed class LegacyProbe : ILegacyProbe
     public string Echo(string value) => value;
     public bool UsesThreadPool() => Thread.CurrentThread.IsThreadPoolThread;
 }
+#endif

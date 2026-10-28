@@ -1,6 +1,6 @@
 # MiniHttpHost
 
-A small, embeddable HTTP server for .NET Framework 4.7.2. Add ordinary HTTP
+A small, embeddable HTTP server targeting .NET Framework 4.7.2 and .NET 10. Add ordinary HTTP
 endpoints to an existing application, including a monolith moving away from WCF.
 No runtime NuGet dependencies, controller discovery, or DI container required.
 

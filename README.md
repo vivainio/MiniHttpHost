@@ -1,6 +1,6 @@
 # MiniHttpHost
 
-A small, embeddable HTTP server for .NET Framework 4.7.2. Add ordinary HTTP
+A small, embeddable HTTP server targeting .NET Framework 4.7.2 and .NET 10. Add ordinary HTTP
 endpoints to an existing application, including a monolith moving away from WCF.
 No runtime NuGet dependencies, controller discovery, or DI container required.
 
@@ -33,6 +33,9 @@ or browse the chapters on GitHub:
 - [Request context and streaming](docs/streaming.md)
 - [Multipart and advanced HTTP](docs/advanced-http.md)
 - [Useful framework web types](docs/framework-web-types.md)
+- [Response compression](docs/compression.md)
+- [NuGet and trusted publishing](docs/nuget.md)
+- [SOAP compatibility endpoint](docs/soap-compatibility.md)
 - [Routing and groups](docs/routing.md)
 - [Middleware, exception handling, and limits](docs/middleware.md)
 - [Lifetime and concurrency](docs/lifetime.md)
@@ -59,7 +62,8 @@ mono examples/ConsoleHost/bin/Release/net472/ConsoleHost.exe
 curl http://localhost:8080/hello/world
 ```
 
-On Windows, run `ConsoleHost.exe` directly. For local macOS development, use Mono.
+On Windows, run `ConsoleHost.exe` directly. On macOS, use
+`dotnet run --project examples/ConsoleHost -f net10.0` or run the Framework build with Mono.
 See [development notes](docs/development.md) for platform differences and checks.
 
 The documentation is built and deployed by GitHub Actions. See

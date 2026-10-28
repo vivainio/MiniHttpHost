@@ -1,0 +1,62 @@
+name: NuGet package
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Package version (build only; does not publish)
+        required: true
+        default: 0.1.0-alpha.1
+  release:
+    types: [published]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    env:
+      REQUESTED_VERSION: ${{ github.event.release.tag_name || inputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+      - name: Validate version
+        shell: bash
+        run: |
+          version="${REQUESTED_VERSION#v}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo 'Expected a version such as 0.1.0 or v0.1.0-alpha.1'
+            exit 1
+          fi
+          printf 'PACKAGE_VERSION=%s\n' "$version" >> "$GITHUB_ENV"
+      - name: Build and pack both frameworks
+        run: dotnet pack MiniHttpHost.csproj -c Release -p:Version="$env:PACKAGE_VERSION" -o artifacts
+      - uses: actions/upload-artifact@v7
+        with:
+          name: nuget-package
+          path: artifacts/*.nupkg
+  publish:
+    if: github.event_name == 'release'
+    needs: build
+    runs-on: ubuntu-latest
+    environment: nuget
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: nuget-package
+          path: artifacts
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+      - uses: NuGet/login@v1
+        id: login
+        with:
+          user: vivainio
+      - name: Publish to NuGet.org
+        env:
+          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
+        run: dotnet nuget push 'artifacts/*.nupkg' --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate

@@ -25,11 +25,13 @@ namespace MiniHttpHost
         public HttpListenerRequest Request => NativeContext.Request;
         public HttpListenerResponse Response => NativeContext.Response;
         public Stream RequestBody => requestBody;
-        public Stream ResponseBody { get; }
+        public Stream ResponseBody { get; internal set; }
         public bool HasStarted { get; private set; }
         public CancellationToken RequestAborted { get; internal set; }
         public IDictionary<string, object> Items { get; } = new Dictionary<string, object>();
         public IDictionary<string, string> RouteValues { get; } = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        internal void MarkResponseStarted() { HasStarted = true; }
 
         internal void LimitBody(long? maximumBytes)
         {

@@ -36,6 +36,8 @@ namespace MiniHttpHost.Examples
                 .MapGet("/", context => context.TextAsync("Hello from MiniHttpHost!\n"))
                 .Map("HEAD", "/", context => context.TextAsync("Hello from MiniHttpHost!\n"))
                 .MapGet("/hello/{name}", context => context.TextAsync("Hello, " + context.RouteValues["name"] + "!\n"))
+                .MapGet("/report", context => context.TextAsync(new string('x', 100000)),
+                    new HttpRouteOptions { EnableCompression = true })
                 .MapGet("/example-error", context => throw new InvalidOperationException("Example application failure"))
                 .MapPost("/binary", binary.UploadAsync,
                     new HttpRouteOptions { MaxRequestBodyBytes = 4L * 1024 * 1024 * 1024, Timeout = TimeSpan.FromMinutes(30) })

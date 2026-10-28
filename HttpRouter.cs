@@ -55,7 +55,7 @@ namespace MiniHttpHost
                 context.LimitBody(route.Options.MaxRequestBodyBytes);
                 if (!route.Options.Timeout.HasValue)
                 {
-                    await route.Handler(context).ConfigureAwait(false);
+                    await InvokeRouteAsync(context, route).ConfigureAwait(false);
                 }
                 else
                 {
@@ -65,7 +65,7 @@ namespace MiniHttpHost
                         using (deadline.Token.Register(context.Abort))
                         {
                             deadline.CancelAfter(route.Options.Timeout.Value);
-                            await route.Handler(context).ConfigureAwait(false);
+                            await InvokeRouteAsync(context, route).ConfigureAwait(false);
                         }
                     }
                 }
@@ -75,6 +75,11 @@ namespace MiniHttpHost
             if (allowed.Count != 0) context.Response.Headers["Allow"] = string.Join(", ", allowed);
             context.Response.ContentLength64 = 0;
         }
+
+        private static Task InvokeRouteAsync(HttpContext context, Route route)
+            => route.Options.EnableCompression
+                ? ResponseCompression.RunAsync(context, route.Handler, route.Options.CompressionProvider)
+                : route.Handler(context);
 
         private static bool IsTokenCharacter(char c) =>
             (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
@@ -142,13 +147,19 @@ namespace MiniHttpHost
     {
         public long? MaxRequestBodyBytes { get; set; }
         public TimeSpan? Timeout { get; set; }
+        public bool EnableCompression { get; set; }
+        public IResponseCompressionProvider CompressionProvider { get; set; } = GzipCompressionProvider.Default;
 
         internal HttpRouteOptions Snapshot()
         {
             if (MaxRequestBodyBytes < 0) throw new ArgumentOutOfRangeException(nameof(MaxRequestBodyBytes));
             if (Timeout.HasValue && (Timeout.Value <= TimeSpan.Zero || Timeout.Value.TotalMilliseconds > int.MaxValue))
                 throw new ArgumentOutOfRangeException(nameof(Timeout));
-            return new HttpRouteOptions { MaxRequestBodyBytes = MaxRequestBodyBytes, Timeout = Timeout };
+            if (EnableCompression) ResponseCompression.ValidateProvider(CompressionProvider);
+            return new HttpRouteOptions {
+                MaxRequestBodyBytes = MaxRequestBodyBytes, Timeout = Timeout,
+                EnableCompression = EnableCompression, CompressionProvider = CompressionProvider
+            };
         }
     }
 

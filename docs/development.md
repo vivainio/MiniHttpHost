@@ -20,7 +20,7 @@ The checks use local HTTP listeners and cover routing, group authorization,
 middleware order, error handling, binary copying, response bytes arriving before
 an upload completes, request limits, route timeouts, and graceful/forced shutdown.
 The Windows GitHub Actions job runs the same executable on .NET Framework against
-HTTP.sys. `MINIHTTPHOST_TEST_PORT` selects the first of four sequential test ports
+HTTP.sys. `MINIHTTPHOST_TEST_PORT` selects the first of five sequential test ports
 when explicit Windows URL reservations are needed. The Windows-only WCF cohosting
 check verifies both protocols can share a process on separate ports and shut down
 independently.
@@ -34,3 +34,10 @@ requests pass locally.
 The current context-based handler API replaces the initial raw-context/two-argument
 API: handlers now receive `HttpContext`, and use `context.RequestAborted` for the
 token. Existing application services can stay instance-based.
+
+Modern development and checks can run without Mono:
+
+```sh
+dotnet run --project examples/ConsoleHost -c Release -f net10.0
+dotnet run --project tests/Checks -c Release -f net10.0
+```
