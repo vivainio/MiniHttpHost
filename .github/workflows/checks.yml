@@ -21,16 +21,10 @@ jobs:
       - name: Reserve local test URLs
         shell: pwsh
         run: |
-          netsh http add urlacl url=http://localhost:18081/ sddl='D:(A;;GX;;;WD)'
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          netsh http add urlacl url=http://localhost:18082/ sddl='D:(A;;GX;;;WD)'
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          netsh http add urlacl url=http://localhost:18083/ sddl='D:(A;;GX;;;WD)'
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          netsh http add urlacl url=http://localhost:18084/ sddl='D:(A;;GX;;;WD)'
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          netsh http add urlacl url=http://localhost:18085/ sddl='D:(A;;GX;;;WD)'
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          foreach ($port in 18081..18088) {
+            netsh http add urlacl url=http://localhost:$port/ sddl='D:(A;;GX;;;WD)'
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
       - run: dotnet build examples/ConsoleHost/ConsoleHost.csproj -c Release
       - run: dotnet build tests/Checks/Checks.csproj -c Release
       - name: Run checks on .NET Framework and HTTP.sys
